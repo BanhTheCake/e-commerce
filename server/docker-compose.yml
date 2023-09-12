@@ -18,6 +18,40 @@ services:
       - 8080:8080
     volumes:
       - adminerData:/var/log/adminer
+  es01:
+    image: bitnami/elasticsearch:8.9.2
+    container_name: es01
+    restart: always
+    volumes:
+      - elasticData:/bitnami/elasticsearch/data
+    ports:
+      - 9200:9200
+    environment:
+      - ELASTICSEARCH_CLUSTER_NAME=${CLUSTER_NAME}
+    networks:
+      - elastic
+
+  kibana:
+    depends_on:
+      - es01
+    image: bitnami/kibana:8.9.2
+    volumes:
+      - kibanadata:/bitnami/kibana
+    ports:
+      - 5601:5601
+    environment:
+      - KIBANA_ELASTICSEARCH_URL=http://es01:9200
+    networks:
+      - elastic
 
 volumes:
   adminerData: 
+    driver: local
+  kibanadata:
+    driver: local
+  elasticData:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge

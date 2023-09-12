@@ -1,5 +1,6 @@
 import { Images, Products, Users } from '@/entities';
 import { ImageType } from '@/entities/enum';
+import { ProductResponse } from '@/products/dto/product.response';
 import { CloudinaryService, isUploadSuccess } from '@app/shared';
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -12,6 +13,11 @@ export class ImagesService {
     private readonly imagesRepository: Repository<Images>,
     private readonly cloudinaryService: CloudinaryService,
   ) {}
+
+  async bulkInsert(imageList: Partial<Images>[]) {
+    const imageEntities = this.imagesRepository.create(imageList);
+    return await this.imagesRepository.save(imageEntities);
+  }
 
   async uploadImage(file: Express.Multer.File, entity: Users | Products) {
     const imageObj = await this.cloudinaryService.uploadFile(file);
@@ -44,7 +50,7 @@ export class ImagesService {
   // uploadFiles
   async uploadImages(
     files: Array<Express.Multer.File>,
-    entity: Products,
+    entity: ProductResponse | Products,
     queryRunner: QueryRunner,
   ) {
     const imageArr = await Promise.all(
@@ -60,7 +66,7 @@ export class ImagesService {
       return {
         url: imageObj.secure_url,
         publicKey: imageObj.public_id,
-        product: entity,
+        productId: entity.id,
         role: ImageType.PRODUCT,
       };
     });

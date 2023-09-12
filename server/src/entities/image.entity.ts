@@ -8,10 +8,10 @@ import { Products } from './product.entity';
   name: 'images',
 })
 export class Images extends DatabaseEntity {
-  @Column({ unique: true })
+  @Column()
   url: string;
 
-  @Column({ unique: true })
+  @Column({ nullable: true })
   publicKey: string;
 
   @Column({

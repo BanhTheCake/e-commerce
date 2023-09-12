@@ -20,14 +20,8 @@ export enum ORDER {
   DESC = 'DESC',
 }
 
-type SORT_BY = keyof Products;
-const ARRAY_SORT_BY: SORT_BY[] = [
-  'label',
-  'created_at',
-  'price',
-  'quantity',
-  'star',
-];
+const ARRAY_SORT_BY = ['label', 'created_at', 'price', 'quantity'] as const;
+type SORT_BY = (typeof ARRAY_SORT_BY)[number];
 
 export class GetAllQueryDto {
   @Transform(({ value }) => Number(value))
@@ -78,7 +72,7 @@ export class GetAllQueryDto {
   @Max(5)
   @IsOptional()
   @ApiProperty({
-    description: 'Value will be use when sortBy = star',
+    description: 'Value will be use when want to filter by star',
     example: 4,
     required: false,
   })
@@ -96,4 +90,16 @@ export class GetAllQueryDto {
     required: false,
   })
   category?: string;
+
+  @Transform(({ value }) => value.trim())
+  @IsString()
+  @MinLength(3)
+  @MaxLength(100)
+  @IsOptional()
+  @ApiProperty({
+    description: 'Query',
+    example: 'Quần áo',
+    required: false,
+  })
+  q?: string;
 }

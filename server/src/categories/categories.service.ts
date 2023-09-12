@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Like, Repository } from 'typeorm';
+import { FindOneOptions, Like, Repository } from 'typeorm';
 import { CreateNewCategoryDto } from './dto/create-new-category.dto';
 import { slugifyFn } from '@/utils/slugify';
 import { GetAllCategoriesDto } from './dto/get-all-categories.dto';
@@ -17,12 +17,14 @@ import {
   GET_ALL_CATEGORY_ROUTE,
   UPDATE_CATEGORY_ROUTE,
 } from '@/constant/category.constant';
+import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
 
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Categories)
     private readonly categoriesRepository: Repository<Categories>,
+    private elasticServices: ElasticSearchService,
   ) {}
 
   async validateCategories(categoriesId: string[]) {
@@ -37,6 +39,16 @@ export class CategoriesService {
       }),
     );
     return categories;
+  }
+
+  findWith(where: FindOneOptions<Categories>['where']) {
+    return this.categoriesRepository.findOne({ where });
+  }
+
+  async bulkInsert(categoryList: { label: string; slug: string }[]) {
+    const categoryEntities = this.categoriesRepository.create(categoryList);
+    await this.categoriesRepository.save(categoryEntities);
+    return categoryEntities;
   }
 
   async createNew(data: CreateNewCategoryDto) {
@@ -127,6 +139,36 @@ export class CategoriesService {
         throw new BadRequestException(DELETE_CATEGORY_ROUTE.NOT_FOUND);
       }
       await this.categoriesRepository.softRemove(currentCategory);
+
+      // update all products has this category
+      await this.elasticServices.updateByQuery({
+        index: 'products',
+        query: {
+          nested: {
+            path: 'categories',
+            query: {
+              match: {
+                'categories.id': currentCategory.id,
+              },
+            },
+          },
+        },
+        script: {
+          lang: 'painless',
+          source: `
+          if (ctx._source.categories != null) {
+            for (int i=ctx._source.categories.length-1; i>=0; i--) {
+                if (ctx._source.categories[i].id == params.value_to_remove) {
+                    ctx._source.categories.remove(i);
+                }
+            }
+          }
+          `,
+          params: {
+            value_to_remove: currentCategory.id,
+          },
+        },
+      });
       return {
         errCode: 0,
         message: DELETE_CATEGORY_ROUTE.SUCCESS,

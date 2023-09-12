@@ -41,6 +41,7 @@ export class ImageSubscriber implements EntitySubscriberInterface<Images> {
 
   // Remove image in cloudinary
   async afterRemove(event: RemoveEvent<Images>) {
+    if (!event.entity.publicKey) return;
     this.cloudinaryService.deleteImage(event.entity.publicKey);
   }
 }

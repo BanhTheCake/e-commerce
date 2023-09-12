@@ -25,3 +25,9 @@ export const UPDATE_PRODUCT_ROUTE = {
   NOT_FOUND: 'Product not found!',
   SUCCESS: (id: string) => `Update product with id ${id} successfully!`,
 };
+
+// Suggest query
+
+export const SUGGEST_ROUTE = {
+  SUCCESS: 'Get auto suggest success!',
+};

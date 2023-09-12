@@ -1,14 +1,16 @@
 import { CloudinaryModule, DatabaseModule } from '@app/shared';
+import { ElasticSearchModule } from '@app/shared/elastic_search/elasticSearch.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { UsersModule } from './users/users.module';
-import { Images, Products, Tokens, Users } from './entities';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AppController } from './app.controller';
+import { CategoriesModule } from './categories/categories.module';
+import { Images, Products, Tokens, Users } from './entities';
+import { Categories } from './entities/category.entity';
+import { Products_Categories } from './entities/products-categories.entity';
 import { ImagesModule } from './images/images.module';
 import { ProductsModule } from './products/products.module';
-import { Products_Categories } from './entities/products-categories.entity';
-import { Categories } from './entities/category.entity';
-import { CategoriesModule } from './categories/categories.module';
+import { UsersModule } from './users/users.module';
 
 @Module({
   imports: [
@@ -39,12 +41,20 @@ import { CategoriesModule } from './categories/categories.module';
       },
       inject: [ConfigService],
     }),
+    ElasticSearchModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        return {
+          node: configService.getOrThrow<string>('ELASTIC_SEARCH_URL'),
+        };
+      },
+      inject: [ConfigService],
+    }),
     UsersModule,
     ImagesModule,
     ProductsModule,
     CategoriesModule,
   ],
-  controllers: [],
+  controllers: [AppController],
   providers: [],
 })
 export class AppModule {}

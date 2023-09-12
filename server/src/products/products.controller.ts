@@ -55,6 +55,8 @@ import {
   UpdateProductResponse,
 } from './dto/update-response.dto';
 import { GetProductsResponse } from './dto/get-all-response.dto';
+import { SuggestDto } from './dto/suggest.dto';
+import { SuggestResponse } from './dto/suggest-response.dto';
 
 @ApiTags('Products')
 @Controller('products')
@@ -78,15 +80,6 @@ export class ProductsController {
     files: Array<Express.Multer.File>,
   ) {
     return this.productsService.createNew(data, user, files);
-  }
-
-  @Get(':id')
-  @AuthWithAccessToken()
-  @Serialize(ProductResponse)
-  @ApiOperation({ summary: 'Get one product with id' })
-  @ApiOkResponse({ type: GetProductResponse })
-  getOne(@Param() data: GetOneParamDto) {
-    return this.productsService.findOne(data);
   }
 
   @Delete(':id')
@@ -121,6 +114,30 @@ export class ProductsController {
       throw new BadRequestException(UPDATE_PRODUCT_ROUTE.NOTHING);
     }
     return this.productsService.updateOne(param, data, files);
+  }
+
+  @Get('suggest')
+  @ApiOperation({ summary: 'Get auto suggest' })
+  @ApiOkResponse({ type: SuggestResponse })
+  autoSuggest(@Query() data: SuggestDto) {
+    return this.productsService.autoSuggest(data);
+  }
+
+  @Get('elastic')
+  @Serialize(ProductResponse)
+  @ApiOperation({ summary: 'Get all product with special filter (elastic)' })
+  @ApiOkResponse({ type: GetProductsResponse })
+  getAllElastic(@Query() data: GetAllQueryDto) {
+    return this.productsService.findAllElastic(data);
+  }
+
+  @Get(':id')
+  @AuthWithAccessToken()
+  @Serialize(ProductResponse)
+  @ApiOperation({ summary: 'Get one product with id' })
+  @ApiOkResponse({ type: GetProductResponse })
+  getOne(@Param() data: GetOneParamDto) {
+    return this.productsService.findOne(data);
   }
 
   @Get()
