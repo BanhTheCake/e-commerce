@@ -42,6 +42,7 @@ export class GetProductsResponse implements IPagination<ProductResponse> {
   @ApiProperty({
     description: 'Data',
     isArray: true,
+    type: ProductResponse,
   })
   data: ProductResponse;
 }

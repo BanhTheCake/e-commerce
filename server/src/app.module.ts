@@ -11,6 +11,12 @@ import { Products_Categories } from './entities/products-categories.entity';
 import { ImagesModule } from './images/images.module';
 import { ProductsModule } from './products/products.module';
 import { UsersModule } from './users/users.module';
+import { CommentsModule } from './comments/comments.module';
+import { Comments } from './entities/comment.entity';
+import { Followers } from './entities/follower.entity';
+import { Carts } from './entities/cart.entity';
+import { CartItems } from './entities/cartItem.entity';
+import { CartsModule } from './carts/carts.module';
 
 @Module({
   imports: [
@@ -25,6 +31,10 @@ import { UsersModule } from './users/users.module';
       Images,
       Products_Categories,
       Categories,
+      Comments,
+      Followers,
+      Carts,
+      CartItems,
     ]),
     ScheduleModule.forRoot(),
     CloudinaryModule.registerAsync({
@@ -53,6 +63,8 @@ import { UsersModule } from './users/users.module';
     ImagesModule,
     ProductsModule,
     CategoriesModule,
+    CommentsModule,
+    CartsModule,
   ],
   controllers: [AppController],
   providers: [],

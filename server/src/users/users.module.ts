@@ -15,10 +15,12 @@ import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
 import { Tokens, Users } from '@/entities';
 import { UserTasksService } from './user-tasks.service';
 import { ImagesModule } from '@/images/images.module';
+import { Followers } from '@/entities/follower.entity';
+import { CartsModule } from '@/carts/carts.module';
 
 @Module({
   imports: [
-    DatabaseModule.forFeature([Users, Tokens]),
+    DatabaseModule.forFeature([Users, Tokens, Followers]),
     HashModule.register({
       joinWith: '.',
       saltLength: 8,
@@ -40,6 +42,7 @@ import { ImagesModule } from '@/images/images.module';
       inject: [ConfigService],
     }),
     ImagesModule,
+    CartsModule,
   ],
   controllers: [UsersController],
   providers: [

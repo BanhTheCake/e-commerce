@@ -9,8 +9,8 @@ import {
   Get,
   Patch,
   Post,
+  Query,
   Res,
-  UploadedFile,
   UseInterceptors,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
@@ -76,6 +76,14 @@ import { AuthWithRefreshToken } from './guards/refresh-token.guard';
 import { UsersService } from './users.service';
 import { imageOptions } from './validators/image.validator';
 import { UploadFileRequired } from '@/decorators/image.decorator';
+import { FollowDto, FollowQueryDto } from './dto/follow.dto';
+import {
+  FollowError_AlreadyFollow,
+  FollowError_UserNotFound,
+  FollowError_Yourself,
+  FollowResponse,
+  GetFollowResponse,
+} from './dto/follow-response.dto';
 
 @ApiTags('users')
 @ApiInternalServerErrorResponse({ type: InternalServerError })
@@ -281,5 +289,38 @@ export class UsersController {
     @Body() _: AvatarDto, // AvatarDto to make swagger understand file
   ) {
     return this.usersService.changeAvatar(file, user);
+  }
+
+  @Post('follow')
+  @AuthWithAccessToken()
+  @ApiAuth()
+  @ApiOperation({ summary: 'Follow or unfollow user' })
+  @ApiExtraModels(
+    FollowError_UserNotFound,
+    FollowError_AlreadyFollow,
+    FollowError_Yourself,
+  )
+  @ApiOkResponse({ type: FollowResponse })
+  @ApiBadRequestResponse({
+    schema: {
+      oneOf: refs(
+        FollowError_UserNotFound,
+        FollowError_AlreadyFollow,
+        FollowError_Yourself,
+      ),
+    },
+  })
+  follow(@Body() data: FollowDto, @User() user: Users) {
+    return this.usersService.follow(data, user.id);
+  }
+
+  @Get('me/follow')
+  @AuthWithAccessToken()
+  @Serialize(UserResponse)
+  @ApiAuth()
+  @ApiOperation({ summary: 'Get follow user (follower of following)' })
+  @ApiOkResponse({ type: GetFollowResponse })
+  getFollow(@User() user: Users, @Query() query: FollowQueryDto) {
+    return this.usersService.getFollow(user.id, query);
   }
 }

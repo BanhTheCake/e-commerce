@@ -3,6 +3,9 @@ import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { Images } from './image.entity';
 import { Products_Categories } from './products-categories.entity';
+import { Comments } from './comment.entity';
+import { Carts } from './cart.entity';
+import { CartItems } from './cartItem.entity';
 
 @Entity({
   name: 'products',
@@ -26,6 +29,10 @@ export class Products extends DatabaseEntity {
   @Column({ type: 'float', default: 0 })
   star: number;
 
+  // Count of comments
+  @Column({ default: 0 })
+  count: number;
+
   @Column({ type: 'text' })
   description: string;
 
@@ -47,4 +54,10 @@ export class Products extends DatabaseEntity {
     { cascade: true },
   )
   productCategory: Products_Categories[];
+
+  @OneToMany(() => CartItems, (cartItem) => cartItem.product, { cascade: true })
+  cart: Carts[];
+
+  @OneToMany(() => Comments, (comment) => comment.product)
+  comments: Comments[];
 }

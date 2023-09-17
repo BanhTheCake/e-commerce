@@ -7,3 +7,10 @@ export interface IPagination<T> {
   hasPrevPage: boolean;
   data: T;
 }
+
+export interface ICursor<T> {
+  limit: number;
+  total: number;
+  next: number;
+  data: T;
+}

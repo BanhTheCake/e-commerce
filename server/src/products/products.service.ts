@@ -119,6 +119,12 @@ export class ProductsService {
     return this.serializeProduct(product);
   }
 
+  getOneNoRelation(id: string) {
+    return this.productsRepository.findOne({
+      where: { id },
+    });
+  }
+
   async getAll() {
     const products = await this.productsRepository
       .createQueryBuilder('products')

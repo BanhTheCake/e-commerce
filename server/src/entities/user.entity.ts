@@ -4,6 +4,9 @@ import { DatabaseEntity } from '@app/shared';
 import { Products } from './product.entity';
 import { Tokens } from './token.entity';
 import { Images } from './image.entity';
+import { Comments } from './comment.entity';
+import { Followers } from './follower.entity';
+import { Carts } from './cart.entity';
 
 @Entity({
   name: 'users',
@@ -65,4 +68,22 @@ export class Users extends DatabaseEntity {
     cascade: true,
   })
   image: Images;
+
+  @OneToMany(() => Comments, (comment) => comment.user, {
+    cascade: true,
+  })
+  comments: Comments[];
+
+  @OneToMany(() => Followers, (follower) => follower.follower, {
+    cascade: true,
+  })
+  followers: Followers[];
+
+  @OneToMany(() => Followers, (follower) => follower.following, {
+    cascade: true,
+  })
+  followings: Followers[];
+
+  @OneToOne(() => Carts, (cart) => cart.user, { cascade: true })
+  cart: Carts;
 }

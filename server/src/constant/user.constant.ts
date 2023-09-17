@@ -71,3 +71,12 @@ export const CHANGE_AVATAR_ROUTE = {
   USER_NOT_FOUND: 'User not found!',
   WRONG_IMAGE_TYPE: 'image only allowed type jpeg, jpg, png',
 };
+
+// Follow route
+
+export const FOLLOW_ROUTE = {
+  SUCCESS: (type: string) => `${type} success!`,
+  USER_NOT_FOUND: 'User not found!',
+  YOURSELF: 'You cannot follow yourself!',
+  ALREADY_FOLLOW: 'You are already following this user!',
+};

@@ -5,7 +5,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOneOptions, MoreThan, Repository } from 'typeorm';
+import { DataSource, FindOneOptions, MoreThan, Repository } from 'typeorm';
 import { SignupDto } from './dto/sign-up.dto';
 import { HashService, JwtUtilsService, NodemailerService } from '@app/shared';
 import { UserResponse } from './dto/user.response';
@@ -26,12 +26,22 @@ import {
   ACTIVE_ROUTE,
   CHANGE_AVATAR_ROUTE,
   CHANGE_PASSWORD_ROUTE,
+  FOLLOW_ROUTE,
   FORGOT_ROUTE,
   INFO_ROUTE,
   RESET_PASSWORD_ROUTE,
   SIGN_IN_ROUTE,
   SIGN_UP_ROUTE,
 } from '@/constant/user.constant';
+import {
+  FollowDto,
+  FollowQueryDto,
+  FollowType,
+  FollowStatus,
+} from './dto/follow.dto';
+import { Followers } from '@/entities/follower.entity';
+import { CartsServices } from '@/carts/carts.services';
+import { Carts } from '@/entities/cart.entity';
 
 @Injectable()
 export class UsersService {
@@ -40,11 +50,22 @@ export class UsersService {
     private readonly usersRepository: Repository<Users>,
     @InjectRepository(Tokens)
     private readonly tokensRepository: Repository<Tokens>,
+    @InjectRepository(Followers)
+    private readonly followsRepository: Repository<Followers>,
     private readonly hashService: HashService,
     private readonly jwtUtilsService: JwtUtilsService,
     private readonly nodemailerService: NodemailerService,
     private readonly imagesService: ImagesService,
+    private readonly cartsServices: CartsServices,
+    private dataSource: DataSource,
   ) {}
+
+  async startTransaction() {
+    const queryRunner = this.dataSource.createQueryRunner();
+    await queryRunner.connect();
+    await queryRunner.startTransaction();
+    return queryRunner;
+  }
 
   async validateActiveToken(token: string) {
     const [userId, activeToken] = token.split('.');
@@ -150,28 +171,52 @@ export class UsersService {
   }
 
   async active({ token }: ActiveDto) {
-    const [userId, activeToken] = token.split('.');
-    if (!userId || !activeToken) {
-      throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
-    }
+    try {
+      const [userId, activeToken] = token.split('.');
+      if (!userId || !activeToken) {
+        throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
+      }
 
-    const user = await this.usersRepository.findOne({
-      where: { id: userId, activeToken },
-    });
+      const user = await this.usersRepository.findOne({
+        where: { id: userId, activeToken },
+      });
 
-    if (!user) {
-      throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
+      if (!user) {
+        throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
+      }
+      if (user.isActive) {
+        throw new BadRequestException(
+          ACTIVE_ROUTE.ACCOUNT_HAS_ALREADY_ACTIVATED,
+        );
+      }
+      const queryRunner = await this.startTransaction();
+      try {
+        // Init cart for user
+        const newCart = this.cartsServices.createEntity({ userId });
+
+        user.isActive = true;
+        user.activeToken = null;
+
+        await queryRunner.manager.getRepository(Users).save(user);
+        await queryRunner.manager.getRepository(Carts).save(newCart);
+        await queryRunner.commitTransaction();
+        return {
+          errCode: 0,
+          message: ACTIVE_ROUTE.SUCCESS,
+        };
+      } catch (error) {
+        await queryRunner.rollbackTransaction();
+        throw error;
+      } finally {
+        await queryRunner.release();
+      }
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.log(error);
+      throw new InternalServerErrorException('Something wrong with server!');
     }
-    if (user.isActive) {
-      throw new BadRequestException(ACTIVE_ROUTE.ACCOUNT_HAS_ALREADY_ACTIVATED);
-    }
-    user.isActive = true;
-    user.activeToken = null;
-    await this.usersRepository.save(user);
-    return {
-      errCode: 0,
-      message: ACTIVE_ROUTE.SUCCESS,
-    };
   }
 
   async signIn(data: SignInDto, res: Response) {
@@ -457,6 +502,117 @@ export class UsersService {
         errCode: 0,
         message: CHANGE_AVATAR_ROUTE.SUCCESS,
         data: currentUser,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.log(error);
+      throw new InternalServerErrorException('Something wrong with server!');
+    }
+  }
+
+  async follow(data: FollowDto, userId: string) {
+    try {
+      const { followingId, type } = data;
+      let typeReturn = '';
+      if (userId === followingId) {
+        throw new BadRequestException(FOLLOW_ROUTE.YOURSELF);
+      }
+      const isExist = await this.usersRepository.findOne({
+        where: { id: followingId },
+      });
+      if (!isExist) {
+        throw new BadRequestException(FOLLOW_ROUTE.USER_NOT_FOUND);
+      }
+      switch (type) {
+        case FollowType.FOLLOW:
+          const isFollowing = await this.followsRepository.findOne({
+            where: { userId, followingId },
+          });
+          if (isFollowing) {
+            throw new BadRequestException(FOLLOW_ROUTE.ALREADY_FOLLOW);
+          }
+          await this.followsRepository.save({
+            userId,
+            followingId,
+          });
+          typeReturn = 'Follow';
+          break;
+        case FollowType.UN_FOLLOW:
+          const followerEntity = await this.followsRepository.findOne({
+            where: { userId, followingId },
+          });
+          if (followerEntity) {
+            await this.followsRepository.remove(followerEntity);
+          }
+          typeReturn = 'Unfollow';
+          break;
+        default:
+          throw new BadRequestException('Wrong type of follow!');
+      }
+      return {
+        errCode: 0,
+        message: FOLLOW_ROUTE.SUCCESS(typeReturn),
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.log(error);
+      throw new InternalServerErrorException('Something wrong with server!');
+    }
+  }
+
+  async getFollow(userId: string, query: FollowQueryDto) {
+    try {
+      const { cursor, limit = 4, type = FollowStatus.FOLLOWER } = query;
+      let followQueryBuilder =
+        this.followsRepository.createQueryBuilder('follow');
+      let total = 0;
+      switch (type) {
+        case FollowStatus.FOLLOWER:
+          total = await this.followsRepository.count({
+            where: { followingId: userId },
+          });
+          followQueryBuilder = followQueryBuilder
+            .leftJoinAndSelect('follow.follower', 'follower')
+            .where('follow.followingId = :id', { id: userId });
+          break;
+        case FollowStatus.FOLLOWING:
+          total = await this.followsRepository.count({
+            where: { userId: userId },
+          });
+          followQueryBuilder = followQueryBuilder
+            .leftJoinAndSelect('follow.following', 'following')
+            .where('follow.userId = :id', { id: userId });
+          break;
+        default:
+          throw new BadRequestException('Wrong type of follow!');
+      }
+      const follows = await followQueryBuilder
+        .andWhere('follow.created_at < :cursor', {
+          cursor: cursor ? new Date(cursor) : new Date(),
+        })
+        .take(limit)
+        .orderBy('follow.created_at', 'DESC')
+        .getMany();
+      const result = follows.map((item) => {
+        if (type === FollowStatus.FOLLOWER) {
+          return item.follower;
+        }
+        return item.following;
+      });
+      const lastItem = follows[follows.length - 1];
+      let next = null;
+      if (lastItem) {
+        next = new Date(lastItem.created_at).getTime();
+      }
+      return {
+        limit,
+        next,
+        total,
+        data: result,
       };
     } catch (error) {
       if (error instanceof HttpException) {

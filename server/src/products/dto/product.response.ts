@@ -54,6 +54,13 @@ export class ProductResponse {
   star: number;
 
   @ApiProperty({
+    description: 'count of comments',
+    example: 5,
+  })
+  @Expose()
+  count: number;
+
+  @ApiProperty({
     description: 'Description of product',
     example: 'Đây là mô tả',
   })
