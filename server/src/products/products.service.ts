@@ -1,4 +1,4 @@
-import { Products, Users } from '@/entities';
+import { Images, Products, Users } from '@/entities';
 import {
   BadRequestException,
   HttpException,
@@ -6,7 +6,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
 import { CreateNewDto } from './dto/create-new.dto';
 import { slugifyFn } from '@/utils/slugify';
 import { CategoriesService } from '@/categories/categories.service';
@@ -71,6 +71,21 @@ export class ProductsService {
       };
     }
     return input;
+  }
+
+  createQueryBuilder(alias: string) {
+    return this.productsRepository.createQueryBuilder(alias);
+  }
+
+  async save(data: any) {
+    return this.productsRepository.save(data);
+  }
+
+  async findOneAndUpdate(
+    where: FindOptionsWhere<Products>,
+    entity: Parameters<typeof this.productsRepository.update>[1],
+  ) {
+    return this.productsRepository.update(where, entity);
   }
 
   async startTransaction() {
@@ -326,7 +341,10 @@ export class ProductsService {
         }
         // List Id files that need to be deleted
         if (data.filesId) {
-          await this.imagesService.deleteFiles(data.filesId, queryRunner);
+          const imagesDelete = await this.imagesService.deleteFiles(
+            data.filesId,
+          );
+          await queryRunner.manager.getRepository(Images).remove(imagesDelete);
         }
         // Upload new images
         if (!isEmpty(files)) {

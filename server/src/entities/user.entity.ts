@@ -7,6 +7,7 @@ import { Images } from './image.entity';
 import { Comments } from './comment.entity';
 import { Followers } from './follower.entity';
 import { Carts } from './cart.entity';
+import { Histories } from './history.entity';
 
 @Entity({
   name: 'users',
@@ -83,6 +84,11 @@ export class Users extends DatabaseEntity {
     cascade: true,
   })
   followings: Followers[];
+
+  @OneToMany(() => Histories, (history) => history.user, {
+    cascade: true,
+  })
+  histories: Histories[];
 
   @OneToOne(() => Carts, (cart) => cart.user, { cascade: true })
   cart: Carts;

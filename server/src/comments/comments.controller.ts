@@ -9,7 +9,7 @@ import {
   Query,
 } from '@nestjs/common';
 import { CommentServices } from './comments.service';
-import { CommentType, CreateDto } from './dto/create.dto';
+import { CreateDto } from './dto/create.dto';
 import { AuthWithAccessToken } from '@/users/guards/access-token.guard';
 import { User } from '@/decorators/CurrentUser.decorator';
 import { Users } from '@/entities';

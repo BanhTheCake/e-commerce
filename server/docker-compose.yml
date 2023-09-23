@@ -44,6 +44,13 @@ services:
     networks:
       - elastic
 
+  redis:
+    container_name: redis
+    image: redis/redis-stack
+    restart: always
+    ports:
+      - 6379:6379
+
 volumes:
   adminerData: 
     driver: local

@@ -102,11 +102,10 @@ export class ImagesService {
     return newImages;
   }
 
-  async deleteFiles(filesId: string[], queryRunner: QueryRunner) {
+  async deleteFiles(filesId: string[]) {
     const imagesDelete = await this.imagesRepository.find({
       where: { id: In(filesId) },
     });
-    await queryRunner.manager.remove(imagesDelete);
     return imagesDelete;
   }
 }

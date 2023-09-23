@@ -1,4 +1,4 @@
-import { CloudinaryModule, DatabaseModule } from '@app/shared';
+import { CloudinaryModule, DatabaseModule, RedisModule } from '@app/shared';
 import { ElasticSearchModule } from '@app/shared/elastic_search/elasticSearch.module';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -17,6 +17,10 @@ import { Followers } from './entities/follower.entity';
 import { Carts } from './entities/cart.entity';
 import { CartItems } from './entities/cartItem.entity';
 import { CartsModule } from './carts/carts.module';
+import { Histories } from './entities/history.entity';
+import { ProductHistories } from './entities/productHistory.entity';
+import { HistoriesModule } from './history/history.module';
+import { BullModule } from '@nestjs/bull';
 
 @Module({
   imports: [
@@ -35,6 +39,8 @@ import { CartsModule } from './carts/carts.module';
       Followers,
       Carts,
       CartItems,
+      Histories,
+      ProductHistories,
     ]),
     ScheduleModule.forRoot(),
     CloudinaryModule.registerAsync({
@@ -59,12 +65,38 @@ import { CartsModule } from './carts/carts.module';
       },
       inject: [ConfigService],
     }),
+    RedisModule.register({
+      useFactory: (configService: ConfigService) => {
+        return {
+          url: configService.getOrThrow<string>('REDIS_URI'),
+        };
+      },
+      inject: [ConfigService],
+    }),
+    BullModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        return {
+          redis: {
+            host: configService.getOrThrow<string>('REDIS_HOST'),
+            port: configService.getOrThrow<number>('REDIS_POST'),
+          },
+          defaultJobOptions: {
+            removeOnComplete: true,
+            removeOnFail: true,
+            attempts: 2, // try 1 times when error
+            backoff: 1000, // wait 1s before each retry
+          },
+        };
+      },
+      inject: [ConfigService],
+    }),
     UsersModule,
     ImagesModule,
     ProductsModule,
     CategoriesModule,
     CommentsModule,
     CartsModule,
+    HistoriesModule,
   ],
   controllers: [AppController],
   providers: [],

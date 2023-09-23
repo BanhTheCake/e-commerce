@@ -8,25 +8,29 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, Repository, IsNull, LessThan } from 'typeorm';
 import { CommentType, CreateDto } from './dto/create.dto';
-import { Products, Users } from '@/entities';
+import { Users } from '@/entities';
 import { ProductsService } from '@/products/products.service';
 import { GetQueryDto } from './dto/get.dto';
 import { paginationFn } from '@/utils/pagination';
 import { UpdateDto } from './dto/update.dto';
 import { GetReplyQueryDto } from './dto/get-reply.dto';
-import { isEmpty } from 'lodash';
+
 import {
   CREATE_COMMENT_ROUTE,
   DELETE_COMMENT_ROUTE,
   GET_REPLY_ROUTE,
   UPDATE_COMMENT_ROUTE,
 } from '@/constant/comment.constant';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { StarType, UpdateStarQueue } from './queue/update-star.queue';
 
 @Injectable()
 export class CommentServices {
   constructor(
     @InjectRepository(Comments)
     private readonly commentRepository: Repository<Comments>,
+    @InjectQueue('comments') private readonly commentQueue: Queue,
     private productServices: ProductsService,
     private dataSource: DataSource,
   ) {}
@@ -93,7 +97,7 @@ export class CommentServices {
   async create(user: Users, data: CreateDto) {
     try {
       const { replyId, productId, type = CommentType.CREATE, starValue } = data;
-      let product = await this.productServices.getOneNoRelation(productId);
+      const product = await this.productServices.getOneNoRelation(productId);
       if (!product) {
         throw new BadRequestException(CREATE_COMMENT_ROUTE.NOT_FOUND_PRODUCT);
       }
@@ -105,6 +109,10 @@ export class CommentServices {
             userId: user.id,
             replyId: null,
           });
+          await this.commentQueue.add(
+            'updateStar',
+            new UpdateStarQueue(StarType.INCR, productId, starValue),
+          );
           break;
         case CommentType.REPLY:
           commentEntity = this.commentRepository.create({
@@ -117,34 +125,12 @@ export class CommentServices {
         default:
           throw new BadRequestException(CREATE_COMMENT_ROUTE.INVALID_TYPE);
       }
-      const queryRunner = await this.startTransaction();
-      try {
-        if (type === CommentType.CREATE) {
-          const [star, count] = this.incrementRating({
-            count: product.count,
-            star: product.star,
-            starValue,
-          });
-          product = {
-            ...product,
-            star,
-            count,
-          };
-          await queryRunner.manager.getRepository(Products).save(product);
-        }
-        const rs = await queryRunner.manager.save(commentEntity);
-        await queryRunner.commitTransaction();
-        return {
-          errCode: 0,
-          message: CREATE_COMMENT_ROUTE.SUCCESS,
-          data: rs,
-        };
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        await queryRunner.release();
-      }
+      const rs = await this.commentRepository.save(commentEntity);
+      return {
+        errCode: 0,
+        message: CREATE_COMMENT_ROUTE.SUCCESS,
+        data: rs,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -156,53 +142,34 @@ export class CommentServices {
 
   async update(id: string, data: UpdateDto, userId: string) {
     try {
+      const { starValue, content } = data;
       const comment = await this.commentRepository.findOne({
         where: { id, userId },
       });
       if (!comment) {
         throw new BadRequestException(UPDATE_COMMENT_ROUTE.NOT_FOUND);
       }
-      const { starValue, content } = data;
       if (content) {
         comment.content = content;
       }
-      const queryRunner = await this.startTransaction();
-      try {
-        if (!comment.replyId && starValue && comment.starValue !== starValue) {
-          const product = await this.productServices.getOneNoRelation(
+      if (!comment.replyId && starValue && comment.starValue !== starValue) {
+        await this.commentQueue.add(
+          'updateStar',
+          new UpdateStarQueue(
+            StarType.MODIFY,
             comment.productId,
-          );
-          if (!product) {
-            throw new BadRequestException(
-              UPDATE_COMMENT_ROUTE.NOT_FOUND_PRODUCT,
-            );
-          }
-          const [star, count] = this.modifyRating({
-            count: product.count,
-            star: product.star,
             starValue,
-            prevStarValue: comment.starValue,
-          });
-          comment.starValue = starValue;
-          await queryRunner.manager.getRepository(Products).save({
-            ...product,
-            star,
-            count,
-          });
-        }
-        await queryRunner.manager.getRepository(Comments).save(comment);
-        await queryRunner.commitTransaction();
-        return {
-          errCode: 0,
-          message: UPDATE_COMMENT_ROUTE.SUCCESS,
-          data: comment,
-        };
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        await queryRunner.release();
+            comment.starValue,
+          ),
+        );
+        comment.starValue = starValue;
       }
+      await this.commentRepository.save(comment);
+      return {
+        errCode: 0,
+        message: UPDATE_COMMENT_ROUTE.SUCCESS,
+        data: comment,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;
@@ -220,39 +187,22 @@ export class CommentServices {
       if (!comment) {
         throw new BadRequestException(DELETE_COMMENT_ROUTE.NOT_FOUND);
       }
-      const product = await this.productServices.getOneNoRelation(
-        comment.productId,
-      );
-      if (!product) {
-        throw new BadRequestException(DELETE_COMMENT_ROUTE.NOT_FOUND_PRODUCT);
+      if (!comment.replyId) {
+        await this.commentQueue.add(
+          'updateStar',
+          new UpdateStarQueue(
+            StarType.DECR,
+            comment.productId,
+            comment.starValue,
+          ),
+        );
       }
-      const queryRunner = await this.startTransaction();
-      try {
-        if (!comment.replyId) {
-          const [star, count] = this.decrementRating({
-            count: product.count,
-            star: product.star,
-            starValue: comment.starValue,
-          });
-          await queryRunner.manager.getRepository(Products).save({
-            ...product,
-            star,
-            count,
-          });
-        }
-        await queryRunner.manager.remove(comment);
-        await queryRunner.commitTransaction();
-        return {
-          errCode: 0,
-          message: DELETE_COMMENT_ROUTE.SUCCESS,
-          data: comment,
-        };
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        await queryRunner.release();
-      }
+      await this.commentRepository.remove(comment);
+      return {
+        errCode: 0,
+        message: DELETE_COMMENT_ROUTE.SUCCESS,
+        data: comment,
+      };
     } catch (error) {
       if (error instanceof HttpException) {
         throw error;

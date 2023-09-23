@@ -11,3 +11,5 @@ export * from './jwt/jwt.interface';
 export * from './cloudinary/cloudinary.module';
 export * from './cloudinary/cloudinary.service';
 export * from './cloudinary/cloudinary.interface';
+export * from './redis/redis.module';
+export * from './redis/redis.services';
