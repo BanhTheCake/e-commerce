@@ -2,6 +2,7 @@ import { Images, Products, Users } from '@/entities';
 import {
   BadRequestException,
   HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -33,6 +34,8 @@ import {
   QueryDslQueryContainer,
   Sort,
 } from '@elastic/elasticsearch/lib/api/types';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @Injectable()
 export class ProductsService {
@@ -41,6 +44,7 @@ export class ProductsService {
     private readonly productsRepository: Repository<Products>,
     @InjectRepository(Products_Categories)
     private readonly productsCategoriesRepository: Repository<Products_Categories>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private readonly categoriesService: CategoriesService,
     private readonly imagesService: ImagesService,
     private readonly elasticService: ElasticSearchService,
@@ -218,11 +222,24 @@ export class ProductsService {
   // For route get by id
   async findOne({ id }: GetOneParamDto) {
     try {
+      const cache = await this.cacheManager.get<ProductResponse>(
+        `product:${id}`,
+      );
+      if (cache) {
+        return {
+          errCode: 0,
+          message: GET_PRODUCT_ROUTE.SUCCESS(id),
+          data: cache,
+          cache: true,
+        };
+      }
       const data = await this.getOne(id);
+      await this.cacheManager.set(`product:${id}`, data);
       return {
         errCode: 0,
         message: GET_PRODUCT_ROUTE.SUCCESS(id),
         data,
+        cache: false,
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -244,6 +261,7 @@ export class ProductsService {
       }
       await this.productsRepository.softRemove(currentProduct);
       await this.elasticService.deleteDoc({ index: 'products', id });
+      await this.cacheManager.del(`product:${id}`);
       return {
         errCode: 0,
         message: DELETE_PRODUCT_ROUTE.SUCCESS(id),
@@ -354,6 +372,7 @@ export class ProductsService {
             queryRunner,
           );
         }
+        await this.cacheManager.del('product:' + id);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
@@ -454,6 +473,9 @@ export class ProductsService {
   async autoSuggest({ q, limit = 10 }: SuggestDto) {
     try {
       const elasticResult = await this.elasticService.search<ProductResponse>({
+        _source: {
+          include: ['id', 'label'],
+        },
         index: 'products',
         query: {
           bool: {
@@ -469,13 +491,6 @@ export class ProductsService {
                 match: {
                   label: {
                     query: q,
-                  },
-                },
-              },
-              {
-                match: {
-                  'label.normalize': {
-                    query: q,
                     operator: 'and',
                   },
                 },
@@ -484,6 +499,7 @@ export class ProductsService {
                 match: {
                   'label.normalize': {
                     query: q,
+                    operator: 'and',
                   },
                 },
               },
@@ -525,96 +541,124 @@ export class ProductsService {
       } = query;
       const offset = limit * (page - 1);
 
-      const sort: Sort = sortBy
-        ? [
-            {
-              [sortBy]: {
-                order: order === 'DESC' ? 'desc' : 'asc',
+      const keyCache = `products:${slugifyFn(
+        q,
+      )}:${limit}:${page}:${order}:${sortBy}:${star || ''}:${category}`;
+      const cache = await this.cacheManager.get<{
+        total: number;
+        data: ProductResponse[];
+      }>(keyCache);
+
+      let total = 0;
+      let data = null;
+      let isCache = false;
+
+      if (cache) {
+        total = cache.total;
+        data = cache.data;
+        isCache = true;
+      } else {
+        const sort: Sort = sortBy
+          ? [
+              {
+                [sortBy]: {
+                  order: order === 'DESC' ? 'desc' : 'asc',
+                },
+              },
+            ]
+          : [];
+
+        let filter: QueryDslQueryContainer[] = [];
+        const must: QueryDslQueryContainer[] = [
+          this.handleQuery(q, {
+            multi_match: {
+              query: q,
+              operator: 'and',
+              fields: ['label^2', 'label.normalize'],
+            },
+          }),
+        ];
+        const should: QueryDslQueryContainer[] = [
+          this.handleQuery(q, {
+            match_phrase: {
+              'label.autocomplete': {
+                query: q,
+                slop: 10,
+                // https://www.youtube.com/watch?v=V1Eo429iS9c
               },
             },
-          ]
-        : [];
+          }),
+        ];
 
-      let filter: QueryDslQueryContainer[] = [];
-      const must: QueryDslQueryContainer[] = [
-        this.handleQuery(q, {
-          multi_match: {
-            query: q,
-            operator: 'and',
-            fields: ['label^2', 'label.normalize', 'description'],
-          },
-        }),
-      ];
-      const should: QueryDslQueryContainer[] = [
-        this.handleQuery(q, {
-          match_phrase: {
-            'label.autocomplete': {
-              query: q,
-              slop: 10,
-              // https://www.youtube.com/watch?v=V1Eo429iS9c
-            },
-          },
-        }),
-      ];
+        if (star) {
+          filter = [{ term: { star } }];
+        }
 
-      if (star) {
-        filter = [{ term: { star } }];
-      }
-
-      if (category) {
-        filter = [
-          ...filter,
-          {
-            nested: {
-              path: 'categories',
-              query: {
-                bool: {
-                  filter: [
-                    {
-                      term: {
-                        'categories.slug': category,
+        if (category) {
+          filter = [
+            ...filter,
+            {
+              nested: {
+                path: 'categories',
+                query: {
+                  bool: {
+                    filter: [
+                      {
+                        term: {
+                          'categories.slug': category,
+                        },
                       },
-                    },
-                  ],
+                    ],
+                  },
                 },
               },
             },
+          ];
+        }
+        const elasticCount = await this.elasticService.count({
+          index: 'products',
+          query: {
+            bool: {
+              must: must,
+              filter: filter,
+            },
           },
-        ];
-      }
-      const elasticCount = await this.elasticService.count({
-        index: 'products',
-        query: {
-          bool: {
-            must: must,
-            filter: filter,
+        });
+        const elasticResult = await this.elasticService.search<ProductResponse>(
+          {
+            index: 'products',
+            _source: {
+              exclude: ['description'],
+            },
+            query: {
+              bool: {
+                must: must,
+                should: should,
+                filter: filter,
+              },
+            },
+            sort,
+            from: offset,
+            size: limit,
           },
-        },
-      });
-      const elasticResult = await this.elasticService.search<ProductResponse>({
-        index: 'products',
-        query: {
-          bool: {
-            must: must,
-            should: should,
-            filter: filter,
-          },
-        },
-        sort,
-        from: offset,
-        size: limit,
-      });
+        );
 
-      const totalProduct = elasticCount.count;
-      const { total, hasNextPage, hasPrevPage, pages } = paginationFn({
+        total = elasticCount.count;
+        data = elasticResult.hits.hits.map((productSource) => {
+          const { ...product } = productSource._source;
+          return product;
+        });
+        await this.cacheManager.set(keyCache, {
+          total,
+          data,
+        });
+      }
+
+      const { hasNextPage, hasPrevPage, pages } = paginationFn({
         limit,
         page,
-        total: totalProduct,
+        total,
       });
-
-      const data = elasticResult.hits.hits.map(
-        (productSource) => productSource._source,
-      );
 
       return {
         limit,
@@ -624,6 +668,7 @@ export class ProductsService {
         hasNextPage,
         hasPrevPage,
         data,
+        cache: isCache,
       };
     } catch (error) {
       if (error instanceof HttpException) {

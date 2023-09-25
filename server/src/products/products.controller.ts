@@ -10,6 +10,7 @@ import {
   UploadedFiles,
   BadRequestException,
   Query,
+  Inject,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { AuthWithAccessToken } from '@/users/guards/access-token.guard';
@@ -57,6 +58,8 @@ import {
 import { GetProductsResponse } from './dto/get-all-response.dto';
 import { SuggestDto } from './dto/suggest.dto';
 import { SuggestResponse } from './dto/suggest-response.dto';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 
 @ApiTags('Products')
 @Controller('products')
@@ -132,7 +135,6 @@ export class ProductsController {
   }
 
   @Get(':id')
-  @AuthWithAccessToken()
   @Serialize(ProductResponse)
   @ApiOperation({ summary: 'Get one product with id' })
   @ApiOkResponse({ type: GetProductResponse })

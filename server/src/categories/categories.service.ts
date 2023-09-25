@@ -2,6 +2,7 @@ import { Categories } from '@/entities/category.entity';
 import {
   BadRequestException,
   HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -18,14 +19,21 @@ import {
   UPDATE_CATEGORY_ROUTE,
 } from '@/constant/category.constant';
 import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
-
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
 @Injectable()
 export class CategoriesService {
   constructor(
     @InjectRepository(Categories)
     private readonly categoriesRepository: Repository<Categories>,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private elasticServices: ElasticSearchService,
   ) {}
+
+  async delAllCache() {
+    const keys = await this.cacheManager.store.keys('categories:*');
+    await this.cacheManager.store.mdel(...keys);
+  }
 
   async validateCategories(categoriesId: string[]) {
     const categories = await Promise.all(
@@ -67,6 +75,7 @@ export class CategoriesService {
         slug,
       });
       await this.categoriesRepository.save(newCategory);
+      await this.delAllCache();
       return {
         errCode: 0,
         message: CREATE_CATEGORY_ROUTE.SUCCESS,
@@ -84,13 +93,25 @@ export class CategoriesService {
   async getAll(data: GetAllCategoriesDto) {
     try {
       const { q = '' } = data;
+      const keyCache = `categories:${slugifyFn(q)}`;
+      const cache = await this.cacheManager.get<Categories[]>(keyCache);
+      if (cache) {
+        return {
+          errCode: 0,
+          message: GET_ALL_CATEGORY_ROUTE.SUCCESS,
+          data: cache,
+          cache: true,
+        };
+      }
       const categories = await this.categoriesRepository.find({
         where: [{ label: Like(`%${q}%`) }, { slug: Like(`%${slugifyFn(q)}%`) }],
       });
+      await this.cacheManager.set(keyCache, categories, 1000 * 60 * 30);
       return {
         errCode: 0,
         message: GET_ALL_CATEGORY_ROUTE.SUCCESS,
         data: categories,
+        cache: false,
       };
     } catch (error) {
       if (error instanceof HttpException) {
@@ -116,6 +137,36 @@ export class CategoriesService {
         slug,
       };
       await this.categoriesRepository.save(currentCategory);
+      await this.elasticServices.updateByQuery({
+        index: 'products',
+        query: {
+          nested: {
+            path: 'categories',
+            query: {
+              match: {
+                'categories.id': currentCategory.id,
+              },
+            },
+          },
+        },
+        script: {
+          lang: 'painless',
+          source: `
+          if (ctx._source.categories != null) {
+            for (int i=ctx._source.categories.length-1; i>=0; i--) {
+                if (ctx._source.categories[i].id == params.value_to_remove) {
+                    ctx._source.categories[i] = params.value;
+                }
+            }
+          }
+          `,
+          params: {
+            value_to_remove: currentCategory.id,
+            value: currentCategory,
+          },
+        },
+      });
+      await this.delAllCache();
       return {
         errCode: 0,
         message: UPDATE_CATEGORY_ROUTE.SUCCESS,
@@ -169,6 +220,7 @@ export class CategoriesService {
           },
         },
       });
+      await this.delAllCache();
       return {
         errCode: 0,
         message: DELETE_CATEGORY_ROUTE.SUCCESS,

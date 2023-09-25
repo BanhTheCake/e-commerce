@@ -21,6 +21,9 @@ import { Histories } from './entities/history.entity';
 import { ProductHistories } from './entities/productHistory.entity';
 import { HistoriesModule } from './history/history.module';
 import { BullModule } from '@nestjs/bull';
+import { CacheModule } from '@nestjs/cache-manager';
+import { RedisClientOptions } from 'redis';
+import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -89,6 +92,20 @@ import { BullModule } from '@nestjs/bull';
         };
       },
       inject: [ConfigService],
+    }),
+    CacheModule.registerAsync<RedisClientOptions>({
+      useFactory: async (configService: ConfigService) => {
+        return {
+          store: redisStore,
+          socket: {
+            host: configService.getOrThrow<string>('REDIS_HOST'),
+            port: configService.getOrThrow<number>('REDIS_POST'),
+          },
+          ttl: 1000 * 60 * 5, // 1 minute,
+        };
+      },
+      inject: [ConfigService],
+      isGlobal: true,
     }),
     UsersModule,
     ImagesModule,
