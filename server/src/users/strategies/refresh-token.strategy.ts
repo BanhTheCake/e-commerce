@@ -31,7 +31,10 @@ export class RefreshTokenStrategy extends PassportStrategy(
 
   async validate(req: Request) {
     const rfToken = req.cookies['refreshToken'];
-    const user = await this.userService.GetUserWith({ where: { rfToken } });
+    const user = await this.userService.helpers.createQueryBuilder
+      .user('user')
+      .where('user.rfToken = :rfToken', { rfToken })
+      .getOne();
     if (!user) {
       throw new UnauthorizedException();
     }

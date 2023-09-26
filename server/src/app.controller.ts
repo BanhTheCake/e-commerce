@@ -92,7 +92,7 @@ export class AppController {
       ...omit(category, ['items']),
       slug: slugifyFn(category.label).replace('and', 'va'),
     }));
-    return this.categoriesService.bulkInsert(categories);
+    return this.categoriesService.helpers.bulkInsert(categories);
   }
 
   @Get('mock/products')
@@ -100,17 +100,17 @@ export class AppController {
     const arrPromises = mockCategories.map(async (mock) => {
       const category = mock.label;
       const categorySlug = slugifyFn(category).replace('and', 'va');
-      const categoryEntity = await this.categoriesService.findWith({
-        slug: categorySlug,
-      });
+      const categoryEntity = await this.categoriesService.helpers
+        .createQueryBuilder('category')
+        .where('category.slug = :slug', { slug: categorySlug })
+        .getOne();
       const productEntities = [];
       for (const item of mock.items) {
         const product = this.handleProduct(item.attr);
-        const [productEntity] = await this.productsService.bulkInsert([
-          product,
-        ]);
+        const [productEntity] =
+          await this.productsService.helpers.bulkInsert.product([product]);
         const images = this.handleImages(item.images, productEntity.id);
-        await this.imagesService.bulkInsert(images);
+        await this.imagesService.helpers.bulkInsert(images);
         productEntities.push(productEntity);
       }
       const productsCategories = productEntities.map((product) => {
@@ -119,7 +119,9 @@ export class AppController {
           categoryId: categoryEntity.id,
         };
       });
-      await this.productsService.bulkInsertP_Categories(productsCategories);
+      await this.productsService.helpers.bulkInsert.productCategory(
+        productsCategories,
+      );
     });
     await Promise.all(arrPromises);
     return 'Done';
@@ -127,7 +129,9 @@ export class AppController {
 
   @Get('mock/elastic')
   async mockElastic() {
-    const products = await this.productsService.getAll();
+    const products = await this.productsService.helpers.createQueryBuilder
+      .product('products')
+      .getMany();
     const operations = products.flatMap((doc) => [
       { index: { _index: 'products', _id: doc.id } },
       doc,

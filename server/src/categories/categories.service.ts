@@ -7,7 +7,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { FindOneOptions, Like, Repository } from 'typeorm';
+import { DataSource, FindOneOptions, Like, Repository } from 'typeorm';
 import { CreateNewCategoryDto } from './dto/create-new-category.dto';
 import { slugifyFn } from '@/utils/slugify';
 import { GetAllCategoriesDto } from './dto/get-all-categories.dto';
@@ -28,36 +28,44 @@ export class CategoriesService {
     private readonly categoriesRepository: Repository<Categories>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private elasticServices: ElasticSearchService,
+    private dataSource: DataSource,
   ) {}
 
-  async delAllCache() {
+  helpers = {
+    createQueryBuilder: (alias: string) =>
+      this.categoriesRepository.createQueryBuilder(alias),
+    startTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+    validate: async (categoriesId: string[]) => {
+      const categories = await Promise.all(
+        categoriesId.map(async (id) => {
+          const category = await this.categoriesRepository.findOne({
+            where: { id },
+          });
+          if (!category)
+            throw new BadRequestException(`Category with id ${id} not found`);
+          return category;
+        }),
+      );
+      return categories;
+    },
+    bulkInsert: async (categories: { label: string; slug: string }[]) => {
+      const categoryEntities = this.categoriesRepository.create(categories);
+      await this.categoriesRepository.save(categoryEntities);
+      return categoryEntities;
+    },
+  };
+
+  private async delAllCache() {
     const keys = await this.cacheManager.store.keys('categories:*');
     await this.cacheManager.store.mdel(...keys);
   }
 
-  async validateCategories(categoriesId: string[]) {
-    const categories = await Promise.all(
-      categoriesId.map(async (id) => {
-        const category = await this.categoriesRepository.findOne({
-          where: { id },
-        });
-        if (!category)
-          throw new BadRequestException(`Category with id ${id} not found`);
-        return category;
-      }),
-    );
-    return categories;
-  }
-
-  findWith(where: FindOneOptions<Categories>['where']) {
-    return this.categoriesRepository.findOne({ where });
-  }
-
-  async bulkInsert(categoryList: { label: string; slug: string }[]) {
-    const categoryEntities = this.categoriesRepository.create(categoryList);
-    await this.categoriesRepository.save(categoryEntities);
-    return categoryEntities;
-  }
+  // ========= FOR ROUTE ==========
 
   async createNew(data: CreateNewCategoryDto) {
     try {

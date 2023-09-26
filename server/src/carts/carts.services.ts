@@ -3,8 +3,10 @@ import { CartItems } from '@/entities/cartItem.entity';
 import {
   BadRequestException,
   HttpException,
+  Inject,
   Injectable,
   InternalServerErrorException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, DataSource } from 'typeorm';
@@ -43,25 +45,32 @@ export class CartsServices {
     @InjectQueue('carts') private cartsQueue: Queue,
     private dataSource: DataSource,
     private redisServices: RedisServices,
+    @Inject(forwardRef(() => ProductsService))
     private productServices: ProductsService,
   ) {}
 
-  createEntity(data: Partial<Carts>) {
-    return this.cartsRepository.create(data);
-  }
+  helpers = {
+    startTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+    create: (data: Partial<Carts>) => this.cartsRepository.create(data),
+    createQueryBuilder: {
+      cart: (alias: string) => this.cartsRepository.createQueryBuilder(alias),
+      cartItem: (alias: string) =>
+        this.cartItemsRepository.createQueryBuilder(alias),
+    },
+  };
 
-  async startTransaction() {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    return queryRunner;
-  }
+  // ========= FOR ROUTE ==========
 
   async addToCart(data: AddToDto) {
     const { productId, quantity, cartId } = data;
     try {
-      const product = await this.productServices
-        .createQueryBuilder('products')
+      const product = await this.productServices.helpers.createQueryBuilder
+        .product('products')
         .where('products.id = :id', { id: productId })
         .select(['products.id', 'products.quantity'])
         .getOne();
@@ -256,7 +265,7 @@ export class CartsServices {
       // payment ....
       await delay(2000);
 
-      const queryRunner = await this.startTransaction();
+      const queryRunner = await this.helpers.startTransaction();
       try {
         // update stock product
         for (const cartItem of cartItems) {

@@ -5,6 +5,7 @@ import {
   Inject,
   Injectable,
   InternalServerErrorException,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
@@ -36,6 +37,8 @@ import {
 } from '@elastic/elasticsearch/lib/api/types';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { UsersService } from '@/users/users.service';
+import { GetRelativesDto } from './dto/get-relatives.dto';
 
 @Injectable()
 export class ProductsService {
@@ -48,10 +51,51 @@ export class ProductsService {
     private readonly categoriesService: CategoriesService,
     private readonly imagesService: ImagesService,
     private readonly elasticService: ElasticSearchService,
+    @Inject(forwardRef(() => UsersService))
+    private readonly userServices: UsersService,
     private dataSource: DataSource,
   ) {}
 
-  serializeProduct(product: Products) {
+  helpers = {
+    createQueryBuilder: {
+      product: (alias) => this.productsRepository.createQueryBuilder(alias),
+      productCategory: (alias) =>
+        this.productsCategoriesRepository.createQueryBuilder(alias),
+    },
+    starTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+    bulkInsert: {
+      product: async (productList: Partial<Products>[]) => {
+        const productEntities = this.productsRepository.create(productList);
+        return await this.productsRepository.save(productEntities);
+      },
+      productCategory: async (
+        productCategoryList: Partial<Products_Categories>[],
+      ) => {
+        const productCategoryEntities =
+          this.productsCategoriesRepository.create(productCategoryList);
+        return await this.productsCategoriesRepository.save(
+          productCategoryEntities,
+        );
+      },
+    },
+    save: {
+      product: async (product: Partial<Products>) => {
+        return await this.productsRepository.save(product);
+      },
+      productCategory: async (
+        productCategory: Partial<Products_Categories>,
+      ) => {
+        return await this.productsCategoriesRepository.save(productCategory);
+      },
+    },
+  };
+
+  private serializeProduct(product: Products) {
     let result: ProductResponse = {
       ...omit(product, ['productCategory']),
       categories: [],
@@ -65,7 +109,7 @@ export class ProductsService {
     return result;
   }
 
-  handleQuery(
+  private handleQuery(
     q: string,
     input: QueryDslQueryContainer,
   ): QueryDslQueryContainer {
@@ -77,46 +121,9 @@ export class ProductsService {
     return input;
   }
 
-  createQueryBuilder(alias: string) {
-    return this.productsRepository.createQueryBuilder(alias);
-  }
-
-  async save(data: any) {
-    return this.productsRepository.save(data);
-  }
-
-  async findOneAndUpdate(
-    where: FindOptionsWhere<Products>,
-    entity: Parameters<typeof this.productsRepository.update>[1],
-  ) {
-    return this.productsRepository.update(where, entity);
-  }
-
-  async startTransaction() {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    return queryRunner;
-  }
-
-  async bulkInsert(productList: Partial<Products>[]) {
-    const productEntities = this.productsRepository.create(productList);
-    return await this.productsRepository.save(productEntities);
-  }
-
-  async bulkInsertP_Categories(
-    productsCategories: Partial<Products_Categories>[],
-  ) {
-    const productCategoryEntities =
-      this.productsCategoriesRepository.create(productsCategories);
-    return await this.productsCategoriesRepository.save(
-      productCategoryEntities,
-    );
-  }
-
   // leftJoinAndSelect('products.productCategory', 'products_categories')
   // leftJoinAndSelect('entity.nameRelation', 'nameWhateverYouWant')
-  async getOne(id: string) {
+  private async getOne(id: string) {
     // return this.productsRepository.findOne({
     //   where: { id },
     //   relations: {
@@ -138,21 +145,7 @@ export class ProductsService {
     return this.serializeProduct(product);
   }
 
-  getOneNoRelation(id: string) {
-    return this.productsRepository.findOne({
-      where: { id },
-    });
-  }
-
-  async getAll() {
-    const products = await this.productsRepository
-      .createQueryBuilder('products')
-      .leftJoinAndSelect('products.productCategory', 'productCategory')
-      .leftJoinAndSelect('productCategory.category', 'categories')
-      .leftJoinAndSelect('products.images', 'images')
-      .getMany();
-    return products.map((product) => this.serializeProduct(product));
-  }
+  // ========== FOR ROUTE ==========
 
   async createNew(
     data: CreateNewDto,
@@ -168,7 +161,7 @@ export class ProductsService {
       if (existingProduct) {
         throw new BadRequestException(CREATE_PRODUCT_ROUTE.EXIST_LABEL);
       }
-      const categories = await this.categoriesService.validateCategories(
+      const categories = await this.categoriesService.helpers.validate(
         categoriesId,
       );
       const newProduct = this.productsRepository.create({
@@ -178,7 +171,7 @@ export class ProductsService {
       });
 
       // Add transaction
-      const queryRunner = await this.startTransaction();
+      const queryRunner = await this.helpers.starTransaction();
       try {
         await queryRunner.manager.save(newProduct);
         const newProductsCategories = categories.map((category) => ({
@@ -188,7 +181,11 @@ export class ProductsService {
         const newProductsCategoriesEntity =
           this.productsCategoriesRepository.create(newProductsCategories);
         await Promise.all([
-          this.imagesService.uploadImages(files, newProduct, queryRunner),
+          this.imagesService.helpers.upload.multi(
+            files,
+            newProduct,
+            queryRunner,
+          ),
           queryRunner.manager.save(newProductsCategoriesEntity),
         ]);
         await queryRunner.commitTransaction();
@@ -219,7 +216,6 @@ export class ProductsService {
     }
   }
 
-  // For route get by id
   async findOne({ id }: GetOneParamDto) {
     try {
       const cache = await this.cacheManager.get<ProductResponse>(
@@ -280,7 +276,7 @@ export class ProductsService {
     data: UpdateBodyDto,
     files: Array<Express.Multer.File>,
   ) {
-    const queryRunner = await this.startTransaction();
+    const queryRunner = await this.helpers.starTransaction();
     try {
       let currentProduct = await this.getOne(id);
       const copyCurrentProduct = cloneDeep(currentProduct);
@@ -359,14 +355,15 @@ export class ProductsService {
         }
         // List Id files that need to be deleted
         if (data.filesId) {
-          const imagesDelete = await this.imagesService.deleteFiles(
-            data.filesId,
-          );
+          const imagesDelete = await this.imagesService.helpers
+            .createQueryBuilder('image')
+            .where('image.id IN (:...ids)', { ids: data.filesId })
+            .getMany();
           await queryRunner.manager.getRepository(Images).remove(imagesDelete);
         }
         // Upload new images
         if (!isEmpty(files)) {
-          await this.imagesService.uploadImages(
+          await this.imagesService.helpers.upload.multi(
             files,
             currentProduct,
             queryRunner,
@@ -645,8 +642,7 @@ export class ProductsService {
 
         total = elasticCount.count;
         data = elasticResult.hits.hits.map((productSource) => {
-          const { ...product } = productSource._source;
-          return product;
+          return productSource._source;
         });
         await this.cacheManager.set(keyCache, {
           total,
@@ -675,6 +671,126 @@ export class ProductsService {
         throw error;
       }
       console.log(error);
+      throw new InternalServerErrorException('Something wrong with server!');
+    }
+  }
+
+  async findAllRelative(data: GetRelativesDto) {
+    try {
+      const { userId, page, limit } = data;
+      const offset = limit * (page - 1);
+      let followerIds = [];
+      let must_not: QueryDslQueryContainer[] = [];
+      let total = 0;
+      let rs = null;
+      let isCache = false;
+
+      const keyCache = `products:${limit}:${page}:${userId}`;
+      const cache = await this.cacheManager.get<{
+        total: number;
+        data: ProductResponse[];
+      }>(keyCache);
+
+      if (cache) {
+        total = cache.total;
+        rs = cache.data;
+        isCache = true;
+      } else {
+        if (userId) {
+          const followers = await this.userServices.helpers.createQueryBuilder
+            .follow('follow')
+            .where('follow.userId = :id', { id: userId })
+            .select(['follow.followingId', 'follow.userId'])
+            .orderBy('follow.created_at', 'DESC')
+            .take(10)
+            .getMany();
+          followerIds = followers.map((follower) => {
+            return follower.followingId;
+          });
+          must_not = [{ term: { ownerId: userId } }];
+        }
+        const elasticCount = await this.elasticService.count({
+          index: 'products',
+          query: {
+            bool: {
+              must: [{ match_all: {} }],
+              must_not: must_not,
+            },
+          },
+        });
+        const elasticResult = await this.elasticService.search<ProductResponse>(
+          {
+            index: 'products',
+            _source: {
+              exclude: ['description'],
+            },
+            query: {
+              function_score: {
+                query: {
+                  bool: {
+                    must: [{ match_all: {} }],
+                    must_not: must_not,
+                  },
+                },
+                functions: [
+                  {
+                    script_score: {
+                      script: {
+                        lang: 'painless',
+                        source: `   
+                      double totalScore = 0.0;
+                      if (params['ownerIds'].contains(doc['ownerId'].value)) {
+                        totalScore = totalScore + 1
+                      }
+                      long millis = doc['created_at'].value.millis;
+                      double dateScore = Math.log(millis);
+                      totalScore = totalScore + dateScore;
+                      return totalScore;
+                      `,
+                        params: {
+                          ownerIds: followerIds,
+                        },
+                      },
+                    },
+                  },
+                ],
+              },
+            },
+            from: offset,
+            size: limit,
+          },
+        );
+        total = elasticCount.count;
+        rs = elasticResult.hits.hits.map((productSource) => {
+          return productSource._source;
+        });
+        await this.cacheManager.set(keyCache, {
+          total,
+          data: rs,
+        });
+      }
+
+      const { hasNextPage, hasPrevPage, pages } = paginationFn({
+        limit,
+        page,
+        total,
+      });
+      return {
+        limit,
+        page,
+        total,
+        pages,
+        hasNextPage,
+        hasPrevPage,
+        data: rs,
+        cache: isCache,
+      };
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.log(error.body);
+      console.log(JSON.stringify(error.body));
       throw new InternalServerErrorException('Something wrong with server!');
     }
   }

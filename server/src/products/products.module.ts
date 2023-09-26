@@ -1,4 +1,4 @@
-import { Module, OnModuleInit } from '@nestjs/common';
+import { Module, OnModuleInit, forwardRef } from '@nestjs/common';
 import { ProductsController } from './products.controller';
 import { ProductsService } from './products.service';
 import { DatabaseModule } from '@app/shared';
@@ -8,12 +8,14 @@ import { Products_Categories } from '@/entities/products-categories.entity';
 import { ImagesModule } from '@/images/images.module';
 import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
 import { settings, mappings } from './products.mapping';
+import { UsersModule } from '@/users/users.module';
 
 @Module({
   imports: [
     DatabaseModule.forFeature([Products, Products_Categories, Images]),
     CategoriesModule,
     ImagesModule,
+    forwardRef(() => UsersModule),
   ],
   controllers: [ProductsController],
   providers: [ProductsService],

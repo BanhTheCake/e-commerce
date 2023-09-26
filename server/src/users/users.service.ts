@@ -3,6 +3,8 @@ import {
   BadRequestException,
   HttpException,
   InternalServerErrorException,
+  Inject,
+  forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOneOptions, MoreThan, Repository } from 'typeorm';
@@ -56,34 +58,28 @@ export class UsersService {
     private readonly jwtUtilsService: JwtUtilsService,
     private readonly nodemailerService: NodemailerService,
     private readonly imagesService: ImagesService,
+    @Inject(forwardRef(() => CartsServices))
     private readonly cartsServices: CartsServices,
     private dataSource: DataSource,
   ) {}
 
-  async startTransaction() {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    return queryRunner;
-  }
+  helpers = {
+    createQueryBuilder: {
+      user: (alias: string) => this.usersRepository.createQueryBuilder(alias),
+      token: (alias: string) => this.tokensRepository.createQueryBuilder(alias),
+      follow: (alias: string) =>
+        this.followsRepository.createQueryBuilder(alias),
+    },
+    startTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+  };
 
-  async validateActiveToken(token: string) {
-    const [userId, activeToken] = token.split('.');
-    if (!userId || !activeToken) {
-      return false;
-    }
-    const user = await this.usersRepository.findOne({
-      where: { id: userId, activeToken },
-    });
-    return !!user;
-  }
-
-  async GetUserWith(opts: FindOneOptions<Users>) {
-    const user = await this.usersRepository.findOne(opts);
-    return user;
-  }
   // Auto generate access and refresh token
-  async generateAT_RT(user: Users) {
+  private async generateAT_RT(user: Users) {
     const accessTokenPromise = this.jwtUtilsService.generateToken(
       {
         id: user.id,
@@ -115,7 +111,7 @@ export class UsersService {
     ];
   }
 
-  async updatePassword(user: Users, password: string) {
+  private async updatePassword(user: Users, password: string) {
     user.password = await this.hashService.hash(password);
     user.rfToken = null;
     await this.usersRepository.save(user);
@@ -170,6 +166,8 @@ export class UsersService {
     }
   }
 
+  // ========== FOR ROUTE ==========
+
   async active({ token }: ActiveDto) {
     try {
       const [userId, activeToken] = token.split('.');
@@ -189,10 +187,10 @@ export class UsersService {
           ACTIVE_ROUTE.ACCOUNT_HAS_ALREADY_ACTIVATED,
         );
       }
-      const queryRunner = await this.startTransaction();
+      const queryRunner = await this.helpers.startTransaction();
       try {
         // Init cart for user
-        const newCart = this.cartsServices.createEntity({ userId });
+        const newCart = this.cartsServices.helpers.create({ userId });
 
         user.isActive = true;
         user.activeToken = null;
@@ -495,7 +493,10 @@ export class UsersService {
       if (!currentUser) {
         throw new BadRequestException(CHANGE_AVATAR_ROUTE.USER_NOT_FOUND);
       }
-      const image = await this.imagesService.uploadImage(file, currentUser);
+      const image = await this.imagesService.helpers.upload.single(
+        file,
+        currentUser,
+      );
       currentUser.avatar = image.url;
       await this.usersRepository.save(currentUser);
       return {

@@ -26,9 +26,10 @@ export class AccessTokenStrategy extends PassportStrategy(
   }
 
   async validate(payload: any) {
-    const user = await this.userService.GetUserWith({
-      where: { id: payload.id },
-    });
+    const user = await this.userService.helpers.createQueryBuilder
+      .user('user')
+      .where('user.id = :id', { id: payload.id })
+      .getOne();
     if (!user) {
       throw new UnauthorizedException();
     }

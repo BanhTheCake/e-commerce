@@ -1,7 +1,7 @@
 import { Carts } from '@/entities/cart.entity';
 import { CartItems } from '@/entities/cartItem.entity';
 import { DatabaseModule } from '@app/shared';
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { CartsController } from './carts.controller';
 import { CartsServices } from './carts.services';
 import { ProductsModule } from '@/products/products.module';
@@ -15,7 +15,7 @@ import { CartsConsumer } from './carts.consumer';
     BullModule.registerQueue({
       name: 'carts',
     }),
-    ProductsModule,
+    forwardRef(() => ProductsModule),
     HistoriesModule,
   ],
   controllers: [CartsController],

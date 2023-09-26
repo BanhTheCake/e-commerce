@@ -60,6 +60,7 @@ import { SuggestDto } from './dto/suggest.dto';
 import { SuggestResponse } from './dto/suggest-response.dto';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
+import { GetRelativesDto } from './dto/get-relatives.dto';
 
 @ApiTags('Products')
 @Controller('products')
@@ -132,6 +133,11 @@ export class ProductsController {
   @ApiOkResponse({ type: GetProductsResponse })
   getAllElastic(@Query() data: GetAllQueryDto) {
     return this.productsService.findAllElastic(data);
+  }
+
+  @Get('relative')
+  getRelatives(@Query() data: GetRelativesDto) {
+    return this.productsService.findAllRelative(data);
   }
 
   @Get(':id')

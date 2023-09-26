@@ -14,7 +14,7 @@ export class CartsConsumer {
   })
   async createHistory(job: Job<any>) {
     const { userId, total, historyItems } = job.data;
-    const queryRunner = await this.cartsServices.startTransaction();
+    const queryRunner = await this.cartsServices.helpers.startTransaction();
     try {
       const historyRepository = queryRunner.manager.getRepository(Histories);
       const historyItemRepository =

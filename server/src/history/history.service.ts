@@ -11,7 +11,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, DataSource } from 'typeorm';
 
 @Injectable()
 export class HistoriesServices {
@@ -20,7 +20,25 @@ export class HistoriesServices {
     private historiesRepository: Repository<Histories>,
     @InjectRepository(ProductHistories)
     private productHistoriesRepository: Repository<ProductHistories>,
+    private dataSource: DataSource,
   ) {}
+
+  helpers = {
+    createQueryBuilder: {
+      history: (alias: string) =>
+        this.historiesRepository.createQueryBuilder(alias),
+      productHistory: (alias: string) =>
+        this.productHistoriesRepository.createQueryBuilder(alias),
+    },
+    startTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+  };
+
+  // ========= FOR ROUTE ==========
 
   async getHistories(userId: string) {
     try {

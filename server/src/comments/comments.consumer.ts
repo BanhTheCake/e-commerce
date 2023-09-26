@@ -20,44 +20,52 @@ export class CommentConsumer {
   async updateStar(job: Job<UpdateStarQueue>) {
     try {
       const { productId, starValue, type, preStarValue } = job.data;
-      const product = await this.ProductService.getOneNoRelation(productId);
+      const product = await this.ProductService.helpers.createQueryBuilder
+        .product('product')
+        .where('product.id = :id', { id: productId })
+        .getOne();
       if (!product) {
         throw new BadRequestException('Product not found');
       }
       switch (type) {
         case StarType.INCR:
-          const [starIncr, countIncr] = this.commentService.incrementRating({
-            count: product.count,
-            star: product.star,
-            starValue,
-          });
+          const [starIncr, countIncr] = this.commentService.helpers.rating.incr(
+            {
+              count: product.count,
+              star: product.star,
+              starValue,
+            },
+          );
 
-          await this.ProductService.save({
+          await this.ProductService.helpers.save.product({
             ...product,
             star: starIncr,
             count: countIncr,
           });
           break;
         case StarType.MODIFY:
-          const [starModify, countModify] = this.commentService.modifyRating({
-            count: product.count,
-            star: product.star,
-            prevStarValue: preStarValue,
-            starValue,
-          });
-          await this.ProductService.save({
+          const [starModify, countModify] =
+            this.commentService.helpers.rating.modify({
+              count: product.count,
+              star: product.star,
+              prevStarValue: preStarValue,
+              starValue,
+            });
+          await this.ProductService.helpers.save.product({
             ...product,
             star: starModify,
             count: countModify,
           });
           break;
         case StarType.DECR:
-          const [starDecr, countDecr] = this.commentService.decrementRating({
-            count: product.count,
-            star: product.star,
-            starValue,
-          });
-          await this.ProductService.save({
+          const [starDecr, countDecr] = this.commentService.helpers.rating.decr(
+            {
+              count: product.count,
+              star: product.star,
+              starValue,
+            },
+          );
+          await this.ProductService.helpers.save.product({
             ...product,
             star: starDecr,
             count: countDecr,

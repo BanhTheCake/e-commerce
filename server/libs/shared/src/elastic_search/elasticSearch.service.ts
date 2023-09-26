@@ -71,7 +71,7 @@ export class ElasticSearchService {
   }
 
   async search<T>(
-    params: SearchRequest,
+    params: Parameters<typeof this.client.search>[0],
     opts?: TransportRequestOptionsWithOutMeta,
   ): Promise<SearchResponse<T, Record<string, AggregationsAggregate>>> {
     return this.client.search(params, opts);

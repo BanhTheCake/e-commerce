@@ -25,6 +25,13 @@ import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { StarType, UpdateStarQueue } from './queue/update-star.queue';
 
+interface IHelperRating<T> {
+  count: number;
+  star: number;
+  starValue: number;
+  prevStarValue?: T;
+}
+
 @Injectable()
 export class CommentServices {
   constructor(
@@ -35,69 +42,56 @@ export class CommentServices {
     private dataSource: DataSource,
   ) {}
 
-  async startTransaction() {
-    const queryRunner = this.dataSource.createQueryRunner();
-    await queryRunner.connect();
-    await queryRunner.startTransaction();
-    return queryRunner;
-  }
+  helpers = {
+    createQueryBuilder: (alias: string) =>
+      this.commentRepository.createQueryBuilder(alias),
+    startTransaction: async () => {
+      const queryRunner = this.dataSource.createQueryRunner();
+      await queryRunner.connect();
+      await queryRunner.startTransaction();
+      return queryRunner;
+    },
+    rating: {
+      decr: ({ count, star, starValue }: IHelperRating<never>) => {
+        const starResult = (star * count - starValue) / (count - 1);
+        const countResult = count - 1;
+        return [starResult, countResult];
+      },
+      incr: ({ count, star, starValue }: IHelperRating<never>) => {
+        const countResult = count + 1;
+        const starResult = star + (starValue - star) / countResult;
+        return [starResult, countResult];
+      },
+      modify: ({
+        count,
+        star,
+        prevStarValue,
+        starValue,
+      }: IHelperRating<number>) => {
+        const [starDecrement, countDecrement] = this.helpers.rating.decr({
+          count: count,
+          star: star,
+          starValue: prevStarValue,
+        });
+        const [starIncrement, countIncrement] = this.helpers.rating.incr({
+          count: countDecrement,
+          star: starDecrement,
+          starValue,
+        });
+        return [starIncrement, countIncrement];
+      },
+    },
+  };
 
-  decrementRating({
-    count,
-    star,
-    starValue,
-  }: {
-    count: number;
-    star: number;
-    starValue: number;
-  }) {
-    const starResult = (star * count - starValue) / (count - 1);
-    const countResult = count - 1;
-    return [starResult, countResult];
-  }
-
-  incrementRating({
-    count,
-    star,
-    starValue,
-  }: {
-    count: number;
-    star: number;
-    starValue: number;
-  }) {
-    const countResult = count + 1;
-    const starResult = star + (starValue - star) / countResult;
-    return [starResult, countResult];
-  }
-
-  modifyRating({
-    count,
-    star,
-    prevStarValue,
-    starValue,
-  }: {
-    count: number;
-    star: number;
-    starValue: number;
-    prevStarValue: number;
-  }) {
-    const [starDecrement, countDecrement] = this.decrementRating({
-      count: count,
-      star: star,
-      starValue: prevStarValue,
-    });
-    const [starIncrement, countIncrement] = this.incrementRating({
-      count: countDecrement,
-      star: starDecrement,
-      starValue,
-    });
-    return [starIncrement, countIncrement];
-  }
+  // ========= FOR ROUTE ==========
 
   async create(user: Users, data: CreateDto) {
     try {
       const { replyId, productId, type = CommentType.CREATE, starValue } = data;
-      const product = await this.productServices.getOneNoRelation(productId);
+      const product = await this.productServices.helpers.createQueryBuilder
+        .product('product')
+        .where('product.id = :id', { id: productId })
+        .getOne();
       if (!product) {
         throw new BadRequestException(CREATE_COMMENT_ROUTE.NOT_FOUND_PRODUCT);
       }
