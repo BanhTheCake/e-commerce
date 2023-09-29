@@ -136,6 +136,9 @@ export class ProductsController {
   }
 
   @Get('relative')
+  @Serialize(ProductResponse)
+  @ApiOperation({ summary: 'Get all product relative' })
+  @ApiOkResponse({ type: GetProductsResponse })
   getRelatives(@Query() data: GetRelativesDto) {
     return this.productsService.findAllRelative(data);
   }

@@ -69,4 +69,12 @@ export class RedisServices {
   async hdel(key: string, field: any) {
     return this.redisClient.hDel(key, field);
   }
+
+  async setAdd(key: string, value: any) {
+    return this.redisClient.sAdd(key, value);
+  }
+
+  async setIsMember(key: string, value: any) {
+    return this.redisClient.sIsMember(key, value);
+  }
 }

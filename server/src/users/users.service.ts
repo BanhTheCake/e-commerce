@@ -9,7 +9,12 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, FindOneOptions, MoreThan, Repository } from 'typeorm';
 import { SignupDto } from './dto/sign-up.dto';
-import { HashService, JwtUtilsService, NodemailerService } from '@app/shared';
+import {
+  HashService,
+  JwtUtilsService,
+  NodemailerService,
+  RedisServices,
+} from '@app/shared';
 import { UserResponse } from './dto/user.response';
 import { IResponse } from '@/response/response';
 import { randomBytes } from 'crypto';
@@ -44,7 +49,12 @@ import {
 import { Followers } from '@/entities/follower.entity';
 import { CartsServices } from '@/carts/carts.services';
 import { Carts } from '@/entities/cart.entity';
-
+import { Cache } from 'cache-manager';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import {
+  RefreshTokenPayload,
+  RefreshTokenResponse,
+} from './strategies/refresh-token.strategy';
 @Injectable()
 export class UsersService {
   constructor(
@@ -60,6 +70,8 @@ export class UsersService {
     private readonly imagesService: ImagesService,
     @Inject(forwardRef(() => CartsServices))
     private readonly cartsServices: CartsServices,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private redisService: RedisServices,
     private dataSource: DataSource,
   ) {}
 
@@ -79,7 +91,7 @@ export class UsersService {
   };
 
   // Auto generate access and refresh token
-  private async generateAT_RT(user: Users) {
+  private async generateAT_RT(user: Users | RefreshTokenPayload) {
     const accessTokenPromise = this.jwtUtilsService.generateToken(
       {
         id: user.id,
@@ -113,7 +125,6 @@ export class UsersService {
 
   private async updatePassword(user: Users, password: string) {
     user.password = await this.hashService.hash(password);
-    user.rfToken = null;
     await this.usersRepository.save(user);
     return user;
   }
@@ -252,8 +263,11 @@ export class UsersService {
         generateCookieOpts(refreshToken.expiresIn),
       );
 
-      user.rfToken = refreshToken.value;
-      await this.usersRepository.save(user);
+      await this.cacheManager.set(
+        `refreshToken:${user.id}`,
+        refreshToken.value,
+        refreshToken.expiresIn,
+      );
       return {
         errCode: 0,
         message: SIGN_IN_ROUTE.SUCCESS,
@@ -270,20 +284,11 @@ export class UsersService {
 
   async signOut(res: Response, user: Users) {
     try {
-      const currentUser = await this.usersRepository.findOne({
-        where: { id: user.id },
-      });
-      if (!currentUser) {
-        throw new BadRequestException();
-      }
-
-      currentUser.rfToken = null;
       // set max age of cookies to 0
       res.cookie('accessToken', null, generateCookieOpts(0));
       res.cookie('refreshToken', null, generateCookieOpts(0));
-
-      await this.usersRepository.save(currentUser);
-
+      await this.cacheManager.del(`refreshToken:${user.id}`);
+      await this.redisService.del(`refreshTokens:${user.id}`);
       return {
         errCode: 0,
         message: 'Sign out success!',
@@ -297,30 +302,29 @@ export class UsersService {
     }
   }
 
-  async refreshToken(user: Users, res: Response) {
+  async refreshToken(user: RefreshTokenResponse, res: Response) {
     try {
-      const currentUser = await this.usersRepository.findOne({
-        where: { id: user.id, rfToken: user.rfToken },
-      });
-      if (!currentUser) {
-        throw new BadRequestException();
-      }
-      const [accessToken, refreshToken] = await this.generateAT_RT(user);
-
+      const { rfToken, ...payload } = user;
+      const [accessToken, refreshToken] = await this.generateAT_RT(
+        payload as RefreshTokenPayload,
+      );
       res.cookie(
         'accessToken',
         accessToken.value,
         generateCookieOpts(accessToken.expiresIn),
       );
-
       res.cookie(
         'refreshToken',
         refreshToken.value,
         generateCookieOpts(refreshToken.expiresIn),
       );
 
-      user.rfToken = refreshToken.value;
-      await this.usersRepository.save(user);
+      await this.cacheManager.set(
+        `refreshToken:${user.id}`,
+        refreshToken.value,
+        refreshToken.expiresIn,
+      );
+      await this.redisService.setAdd(`refreshTokens:${user.id}`, user.rfToken);
       return {
         errCode: 0,
         message: 'Refresh token success!',
@@ -392,6 +396,33 @@ export class UsersService {
     }
   }
 
+  async me(userId: string) {
+    try {
+      console.log('ME: ', userId);
+      let user = null;
+      const keyCache = `user:me:${userId}`;
+      const cache = await this.cacheManager.get<Users>(keyCache);
+      if (cache) {
+        user = cache;
+      } else {
+        const user = await this.usersRepository.findOne({
+          where: { id: userId },
+        });
+        if (!user) {
+          throw new BadRequestException('User not found');
+        }
+        await this.cacheManager.set(keyCache, user);
+      }
+      return user;
+    } catch (error) {
+      if (error instanceof HttpException) {
+        throw error;
+      }
+      console.log(error);
+      throw new InternalServerErrorException('Something wrong with server!');
+    }
+  }
+
   async resetPassword(data: ResetPasswordDto) {
     try {
       const { token, password, userId } = data;
@@ -414,6 +445,7 @@ export class UsersService {
       await Promise.all([
         this.updatePassword(user, password),
         this.tokensRepository.remove(existToken),
+        this.cacheManager.del(`refreshToken:${userId}`),
       ]);
       return {
         errCode: 0,
@@ -471,6 +503,7 @@ export class UsersService {
         ...data,
       };
       await this.usersRepository.save(updateUser);
+      await this.cacheManager.del(`user:me:${user.id}`);
       return {
         errCode: 0,
         message: INFO_ROUTE.SUCCESS,
@@ -499,6 +532,7 @@ export class UsersService {
       );
       currentUser.avatar = image.url;
       await this.usersRepository.save(currentUser);
+      await this.cacheManager.del(`user:me:${user.id}`);
       return {
         errCode: 0,
         message: CHANGE_AVATAR_ROUTE.SUCCESS,

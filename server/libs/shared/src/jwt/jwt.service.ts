@@ -22,13 +22,13 @@ export class JwtUtilsService {
   }
 
   getMillisecondsToken(type: JwtType) {
-    return ms(this.tokenValue[type + '_expires_in'] as string);
+    return ms(this.tokenValue[type + '_expires_in']);
   }
 
   getMs(arrType: JwtType[]): number[] {
     const arrMs = [];
     for (const type of arrType) {
-      arrMs.push(ms(this.tokenValue[type + '_expires_in'] as string));
+      arrMs.push(ms(this.tokenValue[type + '_expires_in']));
     }
     return arrMs;
   }

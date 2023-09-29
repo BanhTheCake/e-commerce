@@ -1,16 +1,29 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 import { PassportStrategy } from '@nestjs/passport';
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Request } from 'express';
 import { UsersService } from '../users.service';
+import { Cache } from 'cache-manager';
+
+export interface AccessTokenPayload {
+  id: string;
+  username: string;
+  iat: number;
+  exp: number;
+}
 
 @Injectable()
 export class AccessTokenStrategy extends PassportStrategy(
   Strategy,
   'access-token',
 ) {
-  constructor(configService: ConfigService, private userService: UsersService) {
+  constructor(
+    configService: ConfigService,
+    private userService: UsersService,
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromExtractors([
         AccessTokenStrategy.getTokenFromCookies,
@@ -25,14 +38,11 @@ export class AccessTokenStrategy extends PassportStrategy(
     return cookies.accessToken;
   }
 
-  async validate(payload: any) {
-    const user = await this.userService.helpers.createQueryBuilder
-      .user('user')
-      .where('user.id = :id', { id: payload.id })
-      .getOne();
-    if (!user) {
+  async validate(payload: AccessTokenPayload) {
+    const isLogin = await this.cacheManager.get(`refreshToken:${payload.id}`);
+    if (!isLogin) {
       throw new UnauthorizedException();
     }
-    return user;
+    return payload;
   }
 }

@@ -49,9 +49,6 @@ export class Users extends DatabaseEntity {
   avatar: string;
 
   @Column({ nullable: true })
-  rfToken: string;
-
-  @Column({ nullable: true })
   activeToken: string;
 
   // When user created -> effect to product

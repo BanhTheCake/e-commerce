@@ -84,6 +84,7 @@ import {
   FollowResponse,
   GetFollowResponse,
 } from './dto/follow-response.dto';
+import { RefreshTokenResponse } from './strategies/refresh-token.strategy';
 
 @ApiTags('users')
 @ApiInternalServerErrorResponse({ type: InternalServerError })
@@ -193,7 +194,7 @@ export class UsersController {
   @ApiAuth()
   @ApiOkResponse({ type: UserResponse })
   me(@User() user: Users) {
-    return user;
+    return this.usersService.me(user.id);
   }
 
   @Get('refreshNewToken')
@@ -202,7 +203,7 @@ export class UsersController {
   @ApiAuth()
   @ApiOkResponse({ type: RefreshNewTokenResponse })
   refreshNewToken(
-    @User() user: Users,
+    @User() user: RefreshTokenResponse,
     @Res({ passthrough: true }) res: Response,
   ) {
     return this.usersService.refreshToken(user, res);
