@@ -1,4 +1,6 @@
-import { Comments } from '@/entities/comment.entity';
+import { Comments, Users } from '@/entities';
+import { ProductsService } from '@/products/products.service';
+import { paginationFn } from '@/utils/pagination';
 import {
   BadRequestException,
   HttpException,
@@ -6,14 +8,11 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, Repository, IsNull, LessThan } from 'typeorm';
+import { DataSource, IsNull, LessThan, Repository } from 'typeorm';
 import { CommentType, CreateDto } from './dto/create.dto';
-import { Users } from '@/entities';
-import { ProductsService } from '@/products/products.service';
-import { GetQueryDto } from './dto/get.dto';
-import { paginationFn } from '@/utils/pagination';
-import { UpdateDto } from './dto/update.dto';
 import { GetReplyQueryDto } from './dto/get-reply.dto';
+import { GetQueryDto } from './dto/get.dto';
+import { UpdateDto } from './dto/update.dto';
 
 import {
   CREATE_COMMENT_ROUTE,

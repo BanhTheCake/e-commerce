@@ -2,8 +2,7 @@ import {
   GET_ALL_HISTORY_ROUTE,
   GET_BY_ID_HISTORY_ROUTE,
 } from '@/constant/history.constant';
-import { Histories } from '@/entities/history.entity';
-import { ProductHistories } from '@/entities/productHistory.entity';
+import { Histories, ProductHistories } from '@/entities';
 import {
   BadRequestException,
   HttpException,
@@ -11,7 +10,7 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 
 @Injectable()
 export class HistoriesServices {

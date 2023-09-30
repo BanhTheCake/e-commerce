@@ -1,13 +1,12 @@
-import { Carts } from '@/entities/cart.entity';
-import { CartItems } from '@/entities/cartItem.entity';
+import { CartItems, Carts } from '@/entities';
+import { HistoriesModule } from '@/history/history.module';
+import { ProductsModule } from '@/products/products.module';
 import { DatabaseModule } from '@app/shared';
+import { BullModule } from '@nestjs/bull';
 import { Module, forwardRef } from '@nestjs/common';
+import { CartsConsumer } from './carts.consumer';
 import { CartsController } from './carts.controller';
 import { CartsServices } from './carts.services';
-import { ProductsModule } from '@/products/products.module';
-import { HistoriesModule } from '@/history/history.module';
-import { BullModule } from '@nestjs/bull';
-import { CartsConsumer } from './carts.consumer';
 
 @Module({
   imports: [

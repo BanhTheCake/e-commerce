@@ -273,23 +273,13 @@ export class UsersController {
 
   @Patch('me/avatar')
   @AuthWithAccessToken()
-  @UseInterceptors(FileInterceptor('file', imageOptions))
   @Serialize(UserResponse)
   @ApiOperation({ summary: 'Change avatar user' })
   @ApiAuth()
-  @ApiConsumes('multipart/form-data')
   @ApiOkResponse({ type: ChangeAvatarResponse })
   @ApiBadRequestResponse({ type: ChangeAvatarError_UserNotFound })
-  @ApiUnsupportedMediaTypeResponse({
-    type: ChangeAvatarError_UnsupportedMediaType,
-  })
-  uploadAvatar(
-    @UploadFileRequired()
-    file: Express.Multer.File,
-    @User() user: Users,
-    @Body() _: AvatarDto, // AvatarDto to make swagger understand file
-  ) {
-    return this.usersService.changeAvatar(file, user);
+  uploadAvatar(@User() user: Users, @Body() data: AvatarDto) {
+    return this.usersService.changeAvatar(data, user);
   }
 
   @Post('follow')

@@ -2,7 +2,6 @@ import { Entity, Column, OneToMany, OneToOne } from 'typeorm';
 import { UserRoles, UserType } from './enum';
 import { DatabaseEntity } from '@app/shared';
 import { Products } from './product.entity';
-import { Tokens } from './token.entity';
 import { Images } from './image.entity';
 import { Comments } from './comment.entity';
 import { Followers } from './follower.entity';
@@ -56,11 +55,6 @@ export class Users extends DatabaseEntity {
     cascade: true,
   })
   products: Products[];
-
-  @OneToMany(() => Tokens, (token) => token.user, {
-    cascade: true,
-  })
-  forgotTokens: Tokens[];
 
   @OneToOne(() => Images, (image) => image.user, {
     cascade: true,

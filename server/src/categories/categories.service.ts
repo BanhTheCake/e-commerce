@@ -1,4 +1,13 @@
-import { Categories } from '@/entities/category.entity';
+import {
+  CREATE_CATEGORY_ROUTE,
+  DELETE_CATEGORY_ROUTE,
+  GET_ALL_CATEGORY_ROUTE,
+  UPDATE_CATEGORY_ROUTE,
+} from '@/constant/category.constant';
+import { Categories } from '@/entities';
+import { slugifyFn } from '@/utils/slugify';
+import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
   HttpException,
@@ -7,20 +16,11 @@ import {
   InternalServerErrorException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOneOptions, Like, Repository } from 'typeorm';
+import { Cache } from 'cache-manager';
+import { DataSource, Like, Repository } from 'typeorm';
 import { CreateNewCategoryDto } from './dto/create-new-category.dto';
-import { slugifyFn } from '@/utils/slugify';
 import { GetAllCategoriesDto } from './dto/get-all-categories.dto';
 import { UpdateCategoryDto } from './dto/update-category.dto';
-import {
-  CREATE_CATEGORY_ROUTE,
-  DELETE_CATEGORY_ROUTE,
-  GET_ALL_CATEGORY_ROUTE,
-  UPDATE_CATEGORY_ROUTE,
-} from '@/constant/category.constant';
-import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 @Injectable()
 export class CategoriesService {
   constructor(

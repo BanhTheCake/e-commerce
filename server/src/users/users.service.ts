@@ -1,34 +1,4 @@
-import {
-  Injectable,
-  BadRequestException,
-  HttpException,
-  InternalServerErrorException,
-  Inject,
-  forwardRef,
-} from '@nestjs/common';
-import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOneOptions, MoreThan, Repository } from 'typeorm';
-import { SignupDto } from './dto/sign-up.dto';
-import {
-  HashService,
-  JwtUtilsService,
-  NodemailerService,
-  RedisServices,
-} from '@app/shared';
-import { UserResponse } from './dto/user.response';
-import { IResponse } from '@/response/response';
-import { randomBytes } from 'crypto';
-import { ActiveDto } from './dto/active.dto';
-import { SignInDto } from './dto/sign-in.dto';
-import { Response } from 'express';
-import { generateCookieOpts } from '@/utils/generateCookieOpts';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { Tokens, Users } from '@/entities';
-import { generateHtml } from '@/utils/generateHtml';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
-import { InfoDto } from './dto/info.dto';
-import { ImagesService } from '@/images/images.service';
+import { CartsServices } from '@/carts/carts.services';
 import {
   ACTIVE_ROUTE,
   CHANGE_AVATAR_ROUTE,
@@ -40,28 +10,56 @@ import {
   SIGN_IN_ROUTE,
   SIGN_UP_ROUTE,
 } from '@/constant/user.constant';
+import { Users, Carts, Followers } from '@/entities';
+import { ImagesService } from '@/images/images.service';
+import { IResponse } from '@/response/response';
+import { generateCookieOpts } from '@/utils/generateCookieOpts';
+import { generateHtml } from '@/utils/generateHtml';
+import {
+  HashService,
+  JwtUtilsService,
+  NodemailerService,
+  RedisServices,
+} from '@app/shared';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import {
+  BadRequestException,
+  HttpException,
+  Inject,
+  Injectable,
+  InternalServerErrorException,
+  forwardRef,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Cache } from 'cache-manager';
+import { randomBytes } from 'crypto';
+import { Response } from 'express';
+import { DataSource, Repository } from 'typeorm';
+import { ActiveDto } from './dto/active.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import {
   FollowDto,
   FollowQueryDto,
-  FollowType,
   FollowStatus,
+  FollowType,
 } from './dto/follow.dto';
-import { Followers } from '@/entities/follower.entity';
-import { CartsServices } from '@/carts/carts.services';
-import { Carts } from '@/entities/cart.entity';
-import { Cache } from 'cache-manager';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { InfoDto } from './dto/info.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { SignInDto } from './dto/sign-in.dto';
+import { SignupDto } from './dto/sign-up.dto';
+import { UserResponse } from './dto/user.response';
 import {
   RefreshTokenPayload,
   RefreshTokenResponse,
 } from './strategies/refresh-token.strategy';
+import { AvatarDto } from './dto/avatar.dto';
+import { ImageType } from '@/entities/enum';
 @Injectable()
 export class UsersService {
   constructor(
     @InjectRepository(Users)
     private readonly usersRepository: Repository<Users>,
-    @InjectRepository(Tokens)
-    private readonly tokensRepository: Repository<Tokens>,
     @InjectRepository(Followers)
     private readonly followsRepository: Repository<Followers>,
     private readonly hashService: HashService,
@@ -78,7 +76,6 @@ export class UsersService {
   helpers = {
     createQueryBuilder: {
       user: (alias: string) => this.usersRepository.createQueryBuilder(alias),
-      token: (alias: string) => this.tokensRepository.createQueryBuilder(alias),
       follow: (alias: string) =>
         this.followsRepository.createQueryBuilder(alias),
     },
@@ -128,6 +125,7 @@ export class UsersService {
     await this.usersRepository.save(user);
     return user;
   }
+  // ========== FOR ROUTE ==========
 
   async signup(data: SignupDto): Promise<IResponse<UserResponse>> {
     try {
@@ -176,8 +174,6 @@ export class UsersService {
       throw new InternalServerErrorException('Something wrong with server!');
     }
   }
-
-  // ========== FOR ROUTE ==========
 
   async active({ token }: ActiveDto) {
     try {
@@ -351,12 +347,8 @@ export class UsersService {
         };
       }
       // Check if already generate forgot token in database
-      const forgotTokenExists = await this.tokensRepository.findOne({
-        where: {
-          userId: currentUser.id,
-          expiredIn: MoreThan(new Date()),
-        },
-      });
+      const forgotTokenKey = `user:forgotToken:${currentUser.id}`;
+      const forgotTokenExists = await this.cacheManager.get(forgotTokenKey);
       if (forgotTokenExists) {
         return {
           errCode: 0,
@@ -367,13 +359,12 @@ export class UsersService {
       const forgotToken = randomBytes(32).toString('hex');
       const forgotTokenHash = await this.hashService.hash(forgotToken);
 
-      const newForgotToken = this.tokensRepository.create({
-        userId: currentUser.id,
-        token: forgotTokenHash,
-        expiredIn: new Date(Date.now() + 5 * 60 * 1000), // 5 minutes
-      });
+      await this.cacheManager.set(
+        forgotTokenKey,
+        forgotTokenHash,
+        1000 * 60 * 60,
+      );
 
-      await this.tokensRepository.save(newForgotToken);
       this.nodemailerService.sendEmail({
         to: currentUser.email,
         subject: 'BanhTheCake - Forgot password',
@@ -426,13 +417,12 @@ export class UsersService {
   async resetPassword(data: ResetPasswordDto) {
     try {
       const { token, password, userId } = data;
-      const existToken = await this.tokensRepository.findOne({
-        where: { userId, expiredIn: MoreThan(new Date()) },
-      });
+      const forgotTokenKey = `user:forgotToken:${userId}`;
+      const existToken = await this.cacheManager.get<string>(forgotTokenKey);
       if (!existToken) {
         throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
       }
-      const isValid = await this.hashService.verify(token, existToken.token);
+      const isValid = await this.hashService.verify(token, existToken);
       if (!isValid) {
         throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
       }
@@ -444,7 +434,7 @@ export class UsersService {
       }
       await Promise.all([
         this.updatePassword(user, password),
-        this.tokensRepository.remove(existToken),
+        this.cacheManager.del(forgotTokenKey),
         this.cacheManager.del(`refreshToken:${userId}`),
       ]);
       return {
@@ -518,32 +508,45 @@ export class UsersService {
     }
   }
 
-  async changeAvatar(file: Express.Multer.File, user: Users) {
+  async changeAvatar(data: AvatarDto, user: Users) {
+    const queryRunner = await this.helpers.startTransaction();
     try {
+      const { url, publicId } = data;
       const currentUser = await this.usersRepository.findOne({
         where: { id: user.id },
       });
       if (!currentUser) {
         throw new BadRequestException(CHANGE_AVATAR_ROUTE.USER_NOT_FOUND);
       }
-      const image = await this.imagesService.helpers.upload.single(
-        file,
-        currentUser,
-      );
+      const image = {
+        url: url,
+        publicKey: publicId,
+        role: ImageType.USER,
+        ownerId: currentUser.id,
+      };
+      const imageEntity = this.imagesService.helpers.create([image])[0];
       currentUser.avatar = image.url;
-      await this.usersRepository.save(currentUser);
+
+      await queryRunner.manager.save(currentUser);
+      await queryRunner.manager.save(imageEntity);
+
       await this.cacheManager.del(`user:me:${user.id}`);
+      await queryRunner.commitTransaction();
+
       return {
         errCode: 0,
         message: CHANGE_AVATAR_ROUTE.SUCCESS,
         data: currentUser,
       };
     } catch (error) {
+      await queryRunner.rollbackTransaction();
       if (error instanceof HttpException) {
         throw error;
       }
       console.log(error);
       throw new InternalServerErrorException('Something wrong with server!');
+    } finally {
+      await queryRunner.release();
     }
   }
 

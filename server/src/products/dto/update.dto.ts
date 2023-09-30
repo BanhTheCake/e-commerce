@@ -2,19 +2,27 @@ import {
   ArrayMaxSize,
   ArrayMinSize,
   IsArray,
+  IsIn,
+  IsNotEmpty,
   IsNumber,
   IsOptional,
   IsPositive,
   IsString,
   IsUUID,
+  IsUrl,
   Max,
   MaxLength,
   Min,
   MinLength,
+  ValidateIf,
+  ValidateNested,
 } from 'class-validator';
 import { TransformJson } from '@/decorators/transform-json.decorator';
 import { ApiProperty } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
+const UpdateTypeArr = ['ADD', 'DEL', 'MODIFY'] as const;
+export type UpdateType = (typeof UpdateTypeArr)[number];
 export class UpdateParamDto {
   @IsUUID()
   @ApiProperty({
@@ -24,33 +32,133 @@ export class UpdateParamDto {
   id: string;
 }
 
-export class UpdateBodyDto {
-  @TransformJson()
-  @IsArray()
-  @IsUUID('all', { each: true })
-  @ArrayMaxSize(5)
-  @ArrayMinSize(1)
-  @IsOptional()
+export class ProductDetails {
+  @ValidateIf((o) => o.type === 'DEL' || o.type === 'MODIFY')
+  @IsUUID()
   @ApiProperty({
-    description: 'List id of images want to delete',
-    example: ['66d695ce-2561-4e07-a992-7e65658a64d3'],
-    type: 'json',
+    description: 'Id of details (required if type is MODIFY or DEL)',
+    example: '66d695ce-2561-4e07-a992-7e65658a64d3',
     required: false,
   })
-  filesId?: string[];
+  id?: string;
 
-  @TransformJson()
-  @IsArray()
-  @IsUUID('all', { each: true })
-  @ArrayMinSize(1)
-  @IsOptional()
+  @IsIn(UpdateTypeArr)
+  @IsNotEmpty()
   @ApiProperty({
-    description: 'List id of categories want to delete',
-    example: ['66d695ce-2561-4e07-a992-7e65658a64d3'],
-    type: 'json',
+    description: 'Type (DEL or MODIFY or ADD)',
+    example: 'DEL',
+  })
+  type: UpdateType;
+
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(3)
+  @ApiProperty({
+    description: 'Key of product details',
+    example: 'Loại bảo hành',
+  })
+  key: string;
+
+  @IsNotEmpty()
+  @IsString()
+  @MinLength(1)
+  @ApiProperty({
+    description: 'Value of product details',
+    example: '256GB',
+  })
+  value: string;
+}
+
+export class ImageBody {
+  @ValidateIf((o) => o.type === 'DEL')
+  @IsUUID()
+  @ApiProperty({
+    description: 'Id of details (required if type is DEL)',
+    example: '66d695ce-2561-4e07-a992-7e65658a64d3',
     required: false,
   })
-  categoriesId?: string[];
+  id?: string;
+
+  @IsIn(UpdateTypeArr)
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Type (DEL or MODIFY or ADD)',
+    example: 'DEL',
+  })
+  type: UpdateType;
+
+  @IsUrl()
+  @ApiProperty({
+    description: 'Url of product',
+    example:
+      'https://images.pexels.com/photos/220453/pexels-photo-220453.jpeg?auto=compress&cs=tinysrgb&dpr=1&w=500',
+  })
+  url: string;
+
+  @IsString()
+  @ApiProperty({
+    description: 'Public id of images',
+    example: 'ecommerce/cjs9a2fw8wlhztacaf2g',
+  })
+  publicId: string;
+}
+
+export class Category {
+  @IsUUID()
+  @ApiProperty({
+    description: 'Id of category',
+    example: '66d695ce-2561-4e07-a992-7e65658a64d3',
+  })
+  id: string;
+
+  @IsIn(UpdateTypeArr)
+  @IsNotEmpty()
+  @ApiProperty({
+    description: 'Type (DEL or ADD)',
+    example: 'DEL',
+  })
+  type: UpdateType;
+}
+
+export class UpdateBodyDto {
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @ArrayMinSize(1)
+  @Type(() => Category)
+  @ApiProperty({
+    description: 'List id of categories',
+    type: Category,
+    isArray: true,
+    required: false,
+  })
+  categories?: Category[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @ArrayMinSize(1)
+  @Type(() => ProductDetails)
+  @ApiProperty({
+    description: 'details of product',
+    type: ProductDetails,
+    isArray: true,
+    required: false,
+  })
+  details?: ProductDetails[];
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @ArrayMinSize(1)
+  @Type(() => Image)
+  @ApiProperty({
+    description: 'images of product',
+    type: ImageBody,
+    isArray: true,
+    required: false,
+  })
+  images?: ImageBody[];
 
   @IsString()
   @MinLength(10)
@@ -63,7 +171,6 @@ export class UpdateBodyDto {
   })
   label?: string;
 
-  @TransformJson()
   @IsNumber()
   @Max(120000000)
   @Min(1000)
@@ -75,7 +182,6 @@ export class UpdateBodyDto {
   })
   price?: number;
 
-  @TransformJson()
   @IsNumber()
   @IsPositive()
   @Max(10000)
@@ -96,15 +202,4 @@ export class UpdateBodyDto {
     required: false,
   })
   description?: string;
-
-  @ApiProperty({
-    description: 'Files update',
-    type: 'array',
-    items: {
-      type: 'string',
-      format: 'binary',
-    },
-    required: false,
-  })
-  files: Array<Express.Multer.File>;
 }

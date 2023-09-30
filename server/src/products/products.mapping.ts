@@ -75,6 +75,9 @@ export const mappings: MappingTypeMapping = {
     images: {
       enabled: false,
     },
+    details: {
+      enabled: false,
+    },
     label: {
       type: 'text',
       fields: {

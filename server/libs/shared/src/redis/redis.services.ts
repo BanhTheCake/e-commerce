@@ -77,4 +77,11 @@ export class RedisServices {
   async setIsMember(key: string, value: any) {
     return this.redisClient.sIsMember(key, value);
   }
+
+  pSubscribe(
+    key: Parameters<(typeof this.redisClient)['pSubscribe']>[0],
+    callback: Parameters<(typeof this.redisClient)['pSubscribe']>[1],
+  ) {
+    return this.redisClient.pSubscribe(key, callback);
+  }
 }

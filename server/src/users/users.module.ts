@@ -1,3 +1,6 @@
+import { CartsModule } from '@/carts/carts.module';
+import { Followers, Users } from '@/entities';
+import { ImagesModule } from '@/images/images.module';
 import {
   DatabaseModule,
   HashModule,
@@ -5,22 +8,17 @@ import {
   NodemailerModule,
 } from '@app/shared';
 import { Module, forwardRef } from '@nestjs/common';
-import { UsersController } from './users.controller';
-import { UsersService } from './users.service';
 import { ConfigService } from '@nestjs/config';
-import { UserSubscriber } from './user.subscriber';
-import { ActiveTokenValidator } from './validators/active-token.validator';
 import { AccessTokenStrategy } from './strategies/access-token.strategy';
 import { RefreshTokenStrategy } from './strategies/refresh-token.strategy';
-import { Tokens, Users } from '@/entities';
-import { UserTasksService } from './user-tasks.service';
-import { ImagesModule } from '@/images/images.module';
-import { Followers } from '@/entities/follower.entity';
-import { CartsModule } from '@/carts/carts.module';
+import { UserSubscriber } from './user.subscriber';
+import { UsersController } from './users.controller';
+import { UsersService } from './users.service';
+import { ActiveTokenValidator } from './validators/active-token.validator';
 
 @Module({
   imports: [
-    DatabaseModule.forFeature([Users, Tokens, Followers]),
+    DatabaseModule.forFeature([Users, Followers]),
     HashModule.register({
       joinWith: '.',
       saltLength: 8,
@@ -51,7 +49,6 @@ import { CartsModule } from '@/carts/carts.module';
     ActiveTokenValidator,
     AccessTokenStrategy,
     RefreshTokenStrategy,
-    UserTasksService,
   ],
   exports: [UsersService],
 })

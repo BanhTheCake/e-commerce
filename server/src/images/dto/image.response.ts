@@ -25,20 +25,6 @@ export class ImagesResponse {
   publicKey: string;
 
   @ApiProperty({
-    description: 'User image',
-    example: '21ca7acc-3276-4178-856a-50f1e85c97fb',
-  })
-  @Expose()
-  ownerId: string;
-
-  @ApiProperty({
-    description: 'Product image',
-    example: '21ca7acc-3276-4178-856a-50f1e85c97fb',
-  })
-  @Expose()
-  productId: string;
-
-  @ApiProperty({
     description: 'Created at',
     example: '2023-09-03T22:20:02.569Z',
   })

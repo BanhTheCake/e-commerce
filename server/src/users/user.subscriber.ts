@@ -1,4 +1,4 @@
-import { Users } from '@/entities/user.entity';
+import { Users } from '@/entities';
 import { NodemailerService } from '@app/shared';
 import {
   DataSource,

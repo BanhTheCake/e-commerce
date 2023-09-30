@@ -3,6 +3,35 @@ import { ImagesResponse } from '@/images/dto/image.response';
 import { ApiProperty } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
+export class ProductDetailsResponse {
+  @ApiProperty({
+    description: 'Key of product details',
+    example: 'Loại sản phẩm',
+  })
+  @Expose()
+  name: string;
+
+  @ApiProperty({
+    description: 'Value of product details',
+    example: '256G',
+  })
+  @Expose()
+  value: string;
+
+  @ApiProperty({
+    description: 'Created at',
+    example: '2023-09-03T22:20:02.569Z',
+  })
+  @Expose()
+  created_at: Date;
+
+  @ApiProperty({
+    description: 'Updated at',
+    example: '2023-09-03T22:20:02.569Z',
+  })
+  @Expose()
+  updated_at: Date;
+}
 export class ProductResponse {
   @ApiProperty({
     description: 'Id of product',
@@ -76,12 +105,21 @@ export class ProductResponse {
   categories: CategoryResponse[];
 
   @ApiProperty({
+    description: 'Categories of product',
+    type: () => [ProductDetailsResponse],
+  })
+  @Expose()
+  @Type(() => CategoryResponse)
+  details: ProductDetailsResponse[];
+
+  @ApiProperty({
     description: 'Images of product',
     type: () => [ImagesResponse],
   })
   @Expose()
   @Type(() => ImagesResponse)
   images: ImagesResponse[];
+
   @ApiProperty({
     description: 'Created at',
     example: '2023-09-03T22:20:02.569Z',

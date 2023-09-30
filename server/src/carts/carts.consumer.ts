@@ -1,6 +1,5 @@
 import { CartsServices } from '@/carts/carts.services';
-import { Histories } from '@/entities/history.entity';
-import { ProductHistories } from '@/entities/productHistory.entity';
+import { Histories, ProductHistories } from '@/entities';
 import { Process, Processor } from '@nestjs/bull';
 import { Job } from 'bull';
 

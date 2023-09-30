@@ -3,14 +3,11 @@ import {
   Post,
   Get,
   Body,
-  UseInterceptors,
   Param,
   Delete,
   Put,
-  UploadedFiles,
   BadRequestException,
   Query,
-  Inject,
 } from '@nestjs/common';
 import { ProductsService } from './products.service';
 import { AuthWithAccessToken } from '@/users/guards/access-token.guard';
@@ -19,9 +16,6 @@ import { User } from '@/decorators/CurrentUser.decorator';
 import { Users } from '@/entities';
 import { Serialize } from '@/interceptors/serialize.interceptor';
 import { ProductResponse } from './dto/product.response';
-import { FilesInterceptor } from '@nestjs/platform-express';
-import { imageOptions } from './validator/image.validator';
-import { UploadFilesRequired } from '@/decorators/image.decorator';
 import { GetOneParamDto } from './dto/get-one-param.dto';
 import { DeleteDto } from './dto/delete.dto';
 import { UpdateBodyDto, UpdateParamDto } from './dto/update.dto';
@@ -34,7 +28,6 @@ import {
   ApiInternalServerErrorResponse,
   ApiCreatedResponse,
   ApiTags,
-  ApiConsumes,
   refs,
   ApiExtraModels,
 } from '@nestjs/swagger';
@@ -58,8 +51,6 @@ import {
 import { GetProductsResponse } from './dto/get-all-response.dto';
 import { SuggestDto } from './dto/suggest.dto';
 import { SuggestResponse } from './dto/suggest-response.dto';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
 import { GetRelativesDto } from './dto/get-relatives.dto';
 
 @ApiTags('Products')
@@ -70,20 +61,13 @@ export class ProductsController {
 
   @Post('create')
   @AuthWithAccessToken()
-  @Serialize(ProductResponse)
-  @UseInterceptors(FilesInterceptor('files', 5, imageOptions))
+  // @Serialize(ProductResponse)
   @ApiOperation({ summary: 'Create new product' })
   @ApiAuth()
-  @ApiConsumes('multipart/form-data')
   @ApiCreatedResponse({ type: CreateNewProductResponse })
   @ApiBadRequestResponse({ type: CreateNewProductError_LabelExist })
-  createNew(
-    @Body() data: CreateNewDto,
-    @User() user: Users,
-    @UploadFilesRequired()
-    files: Array<Express.Multer.File>,
-  ) {
-    return this.productsService.createNew(data, user, files);
+  createNew(@Body() data: CreateNewDto, @User() user: Users) {
+    return this.productsService.createNew(data, user);
   }
 
   @Delete(':id')
@@ -98,10 +82,8 @@ export class ProductsController {
 
   @Put(':id')
   @AuthWithAccessToken()
-  @UseInterceptors(FilesInterceptor('files', 5, imageOptions))
   @ApiOperation({ summary: 'Update product with id' })
   @ApiAuth()
-  @ApiConsumes('multipart/form-data')
   @ApiExtraModels(UpdateProductError_NotFound, UpdateProductError_Nothing)
   @ApiOkResponse({ type: UpdateProductResponse })
   @ApiBadRequestResponse({
@@ -109,15 +91,11 @@ export class ProductsController {
       oneOf: refs(UpdateProductError_NotFound, UpdateProductError_Nothing),
     },
   })
-  updateOne(
-    @Param() param: UpdateParamDto,
-    @Body() data: UpdateBodyDto,
-    @UploadedFiles() files: Array<Express.Multer.File> | undefined,
-  ) {
-    if (isEmpty(data) && !files) {
+  updateOne(@Param() param: UpdateParamDto, @Body() data: UpdateBodyDto) {
+    if (isEmpty(data)) {
       throw new BadRequestException(UPDATE_PRODUCT_ROUTE.NOTHING);
     }
-    return this.productsService.updateOne(param, data, files);
+    return this.productsService.updateOne(param, data);
   }
 
   @Get('suggest')

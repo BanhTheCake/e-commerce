@@ -1,5 +1,14 @@
-import { Carts } from '@/entities/cart.entity';
-import { CartItems } from '@/entities/cartItem.entity';
+import {
+  ADD_TO_CART_ROUTE,
+  DELETE_CART_ITEM_ROUTE,
+  GET_CART_ITEM_ROUTE,
+  PAYMENT_ROUTE,
+  UPDATE_CART_ROUTE,
+} from '@/constant/cart.constant';
+import { CartItems, Carts, Products } from '@/entities';
+import { ProductsService } from '@/products/products.service';
+import { RedisServices } from '@app/shared';
+import { InjectQueue } from '@nestjs/bull';
 import {
   BadRequestException,
   HttpException,
@@ -9,24 +18,13 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, DataSource } from 'typeorm';
-import { AddToDto } from './dto/add.dto';
-import { UpdateDto } from './dto/update.dto';
-import { Products } from '@/entities';
-import { RedisServices } from '@app/shared';
-import { PaymentDto } from './dto/payment.dto';
-import { ProductsService } from '@/products/products.service';
-import { DeleteDto } from './dto/delete.dto';
-import { CreateHistoryQueue, HistoryItem } from './queue/create-history.queue';
-import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
-import {
-  ADD_TO_CART_ROUTE,
-  DELETE_CART_ITEM_ROUTE,
-  GET_CART_ITEM_ROUTE,
-  PAYMENT_ROUTE,
-  UPDATE_CART_ROUTE,
-} from '@/constant/cart.constant';
+import { DataSource, Repository } from 'typeorm';
+import { AddToDto } from './dto/add.dto';
+import { DeleteDto } from './dto/delete.dto';
+import { PaymentDto } from './dto/payment.dto';
+import { UpdateDto } from './dto/update.dto';
+import { CreateHistoryQueue, HistoryItem } from './queue/create-history.queue';
 
 const delay = (time: number) =>
   new Promise((resolve) => setTimeout(resolve, time));

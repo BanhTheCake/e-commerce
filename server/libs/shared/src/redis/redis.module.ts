@@ -30,6 +30,7 @@ export class RedisModule {
               console.log('redis ready');
             });
             await client.connect();
+            client.configSet('notify-keyspace-events', 'Ex');
             return client;
           },
           inject: [REDIS_OPTIONS],

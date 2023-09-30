@@ -1,29 +1,34 @@
 import { CloudinaryModule, DatabaseModule, RedisModule } from '@app/shared';
 import { ElasticSearchModule } from '@app/shared/elastic_search/elasticSearch.module';
+import { BullModule } from '@nestjs/bull';
+import { CacheModule } from '@nestjs/cache-manager';
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
+import { redisStore } from 'cache-manager-redis-yet';
+import { RedisClientOptions } from 'redis';
 import { AppController } from './app.controller';
+import { CartsModule } from './carts/carts.module';
 import { CategoriesModule } from './categories/categories.module';
-import { Images, Products, Tokens, Users } from './entities';
-import { Categories } from './entities/category.entity';
-import { Products_Categories } from './entities/products-categories.entity';
+import { CommentsModule } from './comments/comments.module';
+import {
+  CartItems,
+  Carts,
+  Categories,
+  Comments,
+  Followers,
+  Histories,
+  Images,
+  ProductDetails,
+  ProductHistories,
+  Products,
+  Products_Categories,
+  Users,
+} from './entities';
+import { HistoriesModule } from './history/history.module';
 import { ImagesModule } from './images/images.module';
 import { ProductsModule } from './products/products.module';
 import { UsersModule } from './users/users.module';
-import { CommentsModule } from './comments/comments.module';
-import { Comments } from './entities/comment.entity';
-import { Followers } from './entities/follower.entity';
-import { Carts } from './entities/cart.entity';
-import { CartItems } from './entities/cartItem.entity';
-import { CartsModule } from './carts/carts.module';
-import { Histories } from './entities/history.entity';
-import { ProductHistories } from './entities/productHistory.entity';
-import { HistoriesModule } from './history/history.module';
-import { BullModule } from '@nestjs/bull';
-import { CacheModule } from '@nestjs/cache-manager';
-import { RedisClientOptions } from 'redis';
-import { redisStore } from 'cache-manager-redis-yet';
 
 @Module({
   imports: [
@@ -34,7 +39,6 @@ import { redisStore } from 'cache-manager-redis-yet';
     DatabaseModule.forRoot([
       Users,
       Products,
-      Tokens,
       Images,
       Products_Categories,
       Categories,
@@ -44,6 +48,7 @@ import { redisStore } from 'cache-manager-redis-yet';
       CartItems,
       Histories,
       ProductHistories,
+      ProductDetails,
     ]),
     ScheduleModule.forRoot(),
     CloudinaryModule.registerAsync({

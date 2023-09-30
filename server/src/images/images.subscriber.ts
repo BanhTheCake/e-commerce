@@ -1,4 +1,7 @@
+import { Images } from '@/entities';
+import { ImageType } from '@/entities/enum';
 import { CloudinaryService } from '@app/shared';
+import { InjectRepository } from '@nestjs/typeorm';
 import {
   DataSource,
   EntitySubscriberInterface,
@@ -7,9 +10,6 @@ import {
   RemoveEvent,
   Repository,
 } from 'typeorm';
-import { Images } from '@/entities';
-import { ImageType } from '@/entities/enum';
-import { InjectRepository } from '@nestjs/typeorm';
 
 @EventSubscriber()
 export class ImageSubscriber implements EntitySubscriberInterface<Images> {
@@ -32,7 +32,6 @@ export class ImageSubscriber implements EntitySubscriberInterface<Images> {
     const deleteImage = await this.imagesRepository.findOne({
       where: { ownerId: event.entity.ownerId },
     });
-    console.log(deleteImage);
     if (!deleteImage) {
       return;
     }

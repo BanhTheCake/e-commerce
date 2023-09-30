@@ -1,4 +1,29 @@
-import { Images, Products, Users } from '@/entities';
+import { CategoriesService } from '@/categories/categories.service';
+import {
+  CREATE_PRODUCT_ROUTE,
+  DELETE_PRODUCT_ROUTE,
+  GET_PRODUCT_ROUTE,
+  SUGGEST_ROUTE,
+  UPDATE_PRODUCT_ROUTE,
+} from '@/constant/product.constant';
+import {
+  Images,
+  ProductDetails,
+  Products,
+  Products_Categories,
+  Users,
+} from '@/entities';
+import { ImagesService } from '@/images/images.service';
+import { IPagination } from '@/response/pagination';
+import { UsersService } from '@/users/users.service';
+import { paginationFn } from '@/utils/pagination';
+import { slugifyFn } from '@/utils/slugify';
+import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
+import {
+  QueryDslQueryContainer,
+  Sort,
+} from '@elastic/elasticsearch/lib/api/types';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
   HttpException,
@@ -8,37 +33,21 @@ import {
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, FindOptionsWhere, Repository } from 'typeorm';
-import { CreateNewDto } from './dto/create-new.dto';
-import { slugifyFn } from '@/utils/slugify';
-import { CategoriesService } from '@/categories/categories.service';
-import { Products_Categories } from '@/entities/products-categories.entity';
-import { omit, isEmpty, isEqual, cloneDeep, pickBy, pick } from 'lodash';
-import { ProductResponse } from './dto/product.response';
-import { ImagesService } from '@/images/images.service';
-import { GetOneParamDto } from './dto/get-one-param.dto';
-import { DeleteDto } from './dto/delete.dto';
-import { UpdateBodyDto, UpdateParamDto } from './dto/update.dto';
-import { GetAllQueryDto, ORDER } from './dto/get-all.dto';
-import { IPagination } from '@/response/pagination';
-import { paginationFn } from '@/utils/pagination';
-import {
-  CREATE_PRODUCT_ROUTE,
-  DELETE_PRODUCT_ROUTE,
-  GET_PRODUCT_ROUTE,
-  SUGGEST_ROUTE,
-  UPDATE_PRODUCT_ROUTE,
-} from '@/constant/product.constant';
-import { ElasticSearchService } from '@app/shared/elastic_search/elasticSearch.service';
-import { SuggestDto } from './dto/suggest.dto';
-import {
-  QueryDslQueryContainer,
-  Sort,
-} from '@elastic/elasticsearch/lib/api/types';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
-import { UsersService } from '@/users/users.service';
+import { cloneDeep, isEmpty, isEqual, omit, pick, pickBy } from 'lodash';
+import { DataSource, In, Repository } from 'typeorm';
+import { CreateNewDto } from './dto/create-new.dto';
+import { DeleteDto } from './dto/delete.dto';
+import { GetAllQueryDto, ORDER } from './dto/get-all.dto';
+import { GetOneParamDto } from './dto/get-one-param.dto';
 import { GetRelativesDto } from './dto/get-relatives.dto';
+import { ProductResponse } from './dto/product.response';
+import { SuggestDto } from './dto/suggest.dto';
+import { UpdateBodyDto, UpdateParamDto } from './dto/update.dto';
+import { ImageType } from '@/entities/enum';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bull';
+import { CreateNewQueue } from './queue/create-new.queue';
 
 @Injectable()
 export class ProductsService {
@@ -47,7 +56,10 @@ export class ProductsService {
     private readonly productsRepository: Repository<Products>,
     @InjectRepository(Products_Categories)
     private readonly productsCategoriesRepository: Repository<Products_Categories>,
+    @InjectRepository(ProductDetails)
+    private readonly productDetailsRepository: Repository<ProductDetails>,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    @InjectQueue('products') private productQueue: Queue,
     private readonly categoriesService: CategoriesService,
     private readonly imagesService: ImagesService,
     private readonly elasticService: ElasticSearchService,
@@ -137,6 +149,7 @@ export class ProductsService {
       .leftJoinAndSelect('products.productCategory', 'productCategory')
       .leftJoinAndSelect('productCategory.category', 'categories')
       .leftJoinAndSelect('products.images', 'images')
+      .leftJoinAndSelect('products.details', 'details')
       .where('products.id = :id', { id })
       .getOne();
     if (!product) {
@@ -147,13 +160,9 @@ export class ProductsService {
 
   // ========== FOR ROUTE ==========
 
-  async createNew(
-    data: CreateNewDto,
-    user: Users,
-    files: Array<Express.Multer.File>,
-  ) {
+  async createNew(data: CreateNewDto, user: Users) {
     try {
-      const { label, categories: categoriesId } = data;
+      const { label, categories: categoriesId, details, images } = data;
       const slug = slugifyFn(label);
       const existingProduct = await this.productsRepository.findOne({
         where: [{ label }, { slug }],
@@ -165,7 +174,7 @@ export class ProductsService {
         categoriesId,
       );
       const newProduct = this.productsRepository.create({
-        ...data,
+        ...omit(data, ['images', 'categories', 'details']),
         slug,
         ownerId: user.id,
       });
@@ -174,20 +183,35 @@ export class ProductsService {
       const queryRunner = await this.helpers.starTransaction();
       try {
         await queryRunner.manager.save(newProduct);
+        // create product category
         const newProductsCategories = categories.map((category) => ({
           productId: newProduct.id,
           categoryId: category.id,
         }));
-        const newProductsCategoriesEntity =
+        const newProductsCategoriesEntities =
           this.productsCategoriesRepository.create(newProductsCategories);
-        await Promise.all([
-          this.imagesService.helpers.upload.multi(
-            files,
-            newProduct,
-            queryRunner,
-          ),
-          queryRunner.manager.save(newProductsCategoriesEntity),
-        ]);
+
+        // create product details
+        const newDetails = details.map((detail) => ({
+          name: detail.name,
+          value: detail.value,
+          productId: newProduct.id,
+        }));
+        const newDetailsEntities =
+          this.productDetailsRepository.create(newDetails);
+
+        // create images
+        const newImages = images.map((image) => ({
+          url: image.url,
+          publicKey: image.publicId,
+          role: ImageType.PRODUCT,
+          productId: newProduct.id,
+        }));
+        const newImageEntities = this.imagesService.helpers.create(newImages);
+
+        await queryRunner.manager.save(newImageEntities);
+        await queryRunner.manager.save(newProductsCategoriesEntities);
+        await queryRunner.manager.save(newDetailsEntities);
         await queryRunner.commitTransaction();
       } catch (error) {
         await queryRunner.rollbackTransaction();
@@ -195,13 +219,11 @@ export class ProductsService {
       } finally {
         await queryRunner.release();
       }
-
       const result = await this.getOne(newProduct.id);
-      await this.elasticService.createNewDoc<ProductResponse>({
-        index: 'products',
-        id: result.id,
-        document: result,
-      });
+      await this.productQueue.add(
+        'Add new product',
+        new CreateNewQueue('products', result.id, result),
+      );
       return {
         errCode: 0,
         message: CREATE_PRODUCT_ROUTE.SUCCESS,
@@ -271,11 +293,7 @@ export class ProductsService {
     }
   }
 
-  async updateOne(
-    { id }: UpdateParamDto,
-    data: UpdateBodyDto,
-    files: Array<Express.Multer.File>,
-  ) {
+  async updateOne({ id }: UpdateParamDto, data: UpdateBodyDto) {
     const queryRunner = await this.helpers.starTransaction();
     try {
       let currentProduct = await this.getOne(id);
@@ -286,88 +304,100 @@ export class ProductsService {
       const slug = slugifyFn(data.label ?? currentProduct.label);
       currentProduct = {
         ...currentProduct,
-        ...omit(data, ['filesId', 'categoriesId']),
+        ...omit(data, ['categories', 'details', 'images']),
         slug,
       };
       try {
         await queryRunner.manager.getRepository(Products).save(currentProduct);
-        // Modify categories
-        if (data.categoriesId) {
-          const deleteCategoriesEntity =
+        if (data.categories) {
+          // delete product-category in database
+          const deleteProductCategoryIds = data.categories
+            .filter((category) => {
+              return category.type === 'DEL';
+            })
+            .map((category) => category.id);
+          const deleteCategoryEntities =
             await this.productsCategoriesRepository.find({
-              where: { productId: currentProduct.id },
-            });
-          // Clone array with 2 properties [categoryId, productId]
-          const deleteCategories = deleteCategoriesEntity.map((item) => {
-            return pick(item, ['categoryId', 'productId']);
-          });
-
-          const newCategories = data.categoriesId.map<
-            Partial<Products_Categories>
-          >((id) => {
-            return {
-              productId: currentProduct.id,
-              categoryId: id,
-            };
-          });
-
-          // Check if new categoryIds is equal to delete categoryIds
-          // if true then not delete and not create new
-          if (!isEqual(newCategories, deleteCategories)) {
-            // get equal value between delete categories and new categories
-            const equalValueCategories = deleteCategories
-              .filter((category) =>
-                data.categoriesId.includes(category.categoryId),
-              )
-              .map((category) => category.categoryId);
-
-            // create category that not exist in equalValueCategories
-            const categoriesCreate = newCategories.filter((category) => {
-              return !equalValueCategories.includes(category.categoryId);
-            });
-
-            // delete category that not exist in equalValueCategories
-            const categoriesRemove = deleteCategoriesEntity.filter(
-              (category) => {
-                return !equalValueCategories.includes(category.categoryId);
+              where: {
+                categoryId: In(deleteProductCategoryIds),
               },
-            );
+            });
 
-            /* Example: 
-              newCategories = [{categoryId: 1}, {categoryId: 2}]
-              deleteCategories = [{categoryId: 1}, {categoryId: 3}]
-              [CREATE] => category need to be create = {categoryId: 2}
-              [DELETE] =>  category need to be delete = {category: 3}
-              [NOTHING] => {categoryId: 1} is do nothing (because it exist in delete and create)
-            */
-
-            const newCategoryEntities =
-              this.productsCategoriesRepository.create(categoriesCreate);
-
-            // if categoriesCreate is empty then not save
-            !isEmpty(categoriesCreate) &&
-              queryRunner.manager.save(newCategoryEntities);
-
-            // if categoriesRemove is empty then not delete
-            !isEmpty(categoriesRemove) &&
-              queryRunner.manager.remove(categoriesRemove);
-          }
-        }
-        // List Id files that need to be deleted
-        if (data.filesId) {
-          const imagesDelete = await this.imagesService.helpers
-            .createQueryBuilder('image')
-            .where('image.id IN (:...ids)', { ids: data.filesId })
-            .getMany();
-          await queryRunner.manager.getRepository(Images).remove(imagesDelete);
-        }
-        // Upload new images
-        if (!isEmpty(files)) {
-          await this.imagesService.helpers.upload.multi(
-            files,
-            currentProduct,
-            queryRunner,
+          // create new product-category
+          const newProductCategories = data.categories
+            .filter((category) => {
+              return category.type === 'ADD';
+            })
+            .map((category) => ({
+              categoryId: category.id,
+              productId: currentProduct.id,
+            }));
+          await this.categoriesService.helpers.validate(
+            newProductCategories.map((category) => category.categoryId),
           );
+          const newCategoryEntities =
+            this.productsCategoriesRepository.create(newProductCategories);
+
+          await queryRunner.manager.remove(deleteCategoryEntities);
+          await queryRunner.manager.save(newCategoryEntities);
+        }
+        if (data.images) {
+          // delete images in database
+          const deleteImages = data.images.filter((image) => {
+            return image.type === 'DEL';
+          });
+          const deleteImageEntities =
+            this.imagesService.helpers.create(deleteImages);
+
+          // create new images
+          const newImages = data.images
+            .filter((image) => {
+              return image.type === 'ADD';
+            })
+            .map((image) => ({
+              url: image.url,
+              publicKey: image.publicId,
+              role: ImageType.PRODUCT,
+              productId: currentProduct.id,
+            }));
+          const newImageEntities = this.imagesService.helpers.create(newImages);
+
+          await queryRunner.manager.remove(deleteImageEntities);
+          await queryRunner.manager.save(newImageEntities);
+        }
+        if (data.details) {
+          // delete details in database
+          const deleteDetails = data.details.filter((detail) => {
+            return detail.type === 'DEL';
+          });
+          const deleteDetailEntities =
+            this.productDetailsRepository.create(deleteDetails);
+
+          // create new details
+          const newDetail = data.details
+            .filter((detail) => {
+              return detail.type === 'ADD';
+            })
+            .map((detail) => ({
+              name: detail.key,
+              value: detail.value,
+              productId: currentProduct.id,
+            }));
+          const newDetailEntities =
+            this.productDetailsRepository.create(newDetail);
+
+          // modify details
+          const modifyDetail = data.details.filter((detail) => {
+            return detail.type === 'MODIFY';
+          });
+          const modifyDetailEntities =
+            this.productDetailsRepository.create(modifyDetail);
+
+          await queryRunner.manager.remove(deleteDetailEntities);
+          await queryRunner.manager.save([
+            ...newDetailEntities,
+            ...modifyDetailEntities,
+          ]);
         }
         await this.cacheManager.del('product:' + id);
         await queryRunner.commitTransaction();

@@ -7,6 +7,7 @@ import { Comments } from './comment.entity';
 import { Carts } from './cart.entity';
 import { CartItems } from './cartItem.entity';
 import { ProductHistories } from './productHistory.entity';
+import { ProductDetails } from './productDetail.entity';
 
 @Entity({
   name: 'products',
@@ -64,4 +65,7 @@ export class Products extends DatabaseEntity {
 
   @OneToMany(() => ProductHistories, (productHistory) => productHistory.product)
   productHistories: ProductHistories[];
+
+  @OneToMany(() => ProductDetails, (productDetail) => productDetail.product)
+  details: ProductDetails[];
 }
