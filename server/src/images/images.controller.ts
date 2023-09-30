@@ -8,9 +8,10 @@ import { ApiAuth } from '@/decorators/auth-swagger.decorator';
 import {
   ApiBadRequestResponse,
   ApiConsumes,
-  ApiHeader,
+  ApiInternalServerErrorResponse,
   ApiOkResponse,
   ApiOperation,
+  ApiTags,
   ApiUnsupportedMediaTypeResponse,
 } from '@nestjs/swagger';
 import { PreloadDto } from './dto/preload.dto';
@@ -19,7 +20,12 @@ import {
   PreloadError_InvalidType,
   PreloadResponse,
 } from './dto/preload-response.dto';
+import { InternalServerError } from '@/errors/internal-server.error';
 
+@ApiTags('Images')
+@ApiInternalServerErrorResponse({
+  type: InternalServerError,
+})
 @Controller('images')
 export class ImagesController {
   constructor(private imageService: ImagesService) {}

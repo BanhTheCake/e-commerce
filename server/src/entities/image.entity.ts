@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToOne } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToOne,
+  Unique,
+} from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { ImageType } from './enum';
@@ -7,6 +14,8 @@ import { Products } from './product.entity';
 @Entity({
   name: 'images',
 })
+@Unique('ProductId@Url', ['productId', 'url'])
+@Unique('Owner@Url', ['ownerId', 'url'])
 export class Images extends DatabaseEntity {
   @Column()
   url: string;

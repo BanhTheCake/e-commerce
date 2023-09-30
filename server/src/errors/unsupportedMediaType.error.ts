@@ -5,13 +5,13 @@ export abstract class UnsupportedMediaType<T> {
     description: 'Status code',
     example: 415,
   })
-  StatusCode: number;
+  statusCode: number;
 
   @ApiProperty({
-    description: 'Error message',
-    example: 'Unsupported Media Type',
+    description: 'Code',
+    example: 'UnsupportedMediaTypeException',
   })
-  error: string;
+  code: string;
 
   abstract message: T;
 }

@@ -5,7 +5,13 @@ export class UnauthorizedError {
     description: 'Status code',
     example: 401,
   })
-  StatusCode: number;
+  statusCode: number;
+
+  @ApiProperty({
+    description: 'Code',
+    example: 'UnauthorizedException',
+  })
+  code: string;
 
   @ApiProperty({
     description: 'Error message',

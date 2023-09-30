@@ -40,48 +40,32 @@ export class HistoriesServices {
   // ========= FOR ROUTE ==========
 
   async getHistories(userId: string) {
-    try {
-      const histories = await this.historiesRepository.find({
-        where: { userId },
-      });
-      return {
-        errCode: 0,
-        message: GET_ALL_HISTORY_ROUTE.SUCCESS,
-        data: histories,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+    const histories = await this.historiesRepository.find({
+      where: { userId },
+    });
+    return {
+      errCode: 0,
+      message: GET_ALL_HISTORY_ROUTE.SUCCESS,
+      data: histories,
+    };
   }
 
   async getHistory({ id, userId }: { id: string; userId: string }) {
-    try {
-      const history = await this.historiesRepository.findOne({
-        where: { id, userId },
-        relations: {
-          productHistories: {
-            product: true,
-          },
+    const history = await this.historiesRepository.findOne({
+      where: { id, userId },
+      relations: {
+        productHistories: {
+          product: true,
         },
-      });
-      if (!history) {
-        throw new BadRequestException(GET_BY_ID_HISTORY_ROUTE.NOT_FOUND(id));
-      }
-      return {
-        errCode: 0,
-        message: GET_BY_ID_HISTORY_ROUTE.SUCCESS,
-        data: history,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      },
+    });
+    if (!history) {
+      throw new BadRequestException(GET_BY_ID_HISTORY_ROUTE.NOT_FOUND(id));
     }
+    return {
+      errCode: 0,
+      message: GET_BY_ID_HISTORY_ROUTE.SUCCESS,
+      data: history,
+    };
   }
 }

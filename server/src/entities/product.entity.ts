@@ -1,4 +1,12 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+  Unique,
+  Check,
+} from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { Images } from './image.entity';
@@ -12,6 +20,7 @@ import { ProductDetails } from './productDetail.entity';
 @Entity({
   name: 'products',
 })
+@Unique('label@slug', ['label', 'slug'])
 export class Products extends DatabaseEntity {
   @Column()
   label: string;
@@ -22,6 +31,8 @@ export class Products extends DatabaseEntity {
   @Column({ type: 'integer' })
   price: number;
 
+  // https://orkhan.gitbook.io/typeorm/docs/decorator-reference#check
+  @Check(`"quantity" >= 0`)
   @Column({ type: 'integer' })
   quantity: number;
 

@@ -128,384 +128,302 @@ export class UsersService {
   // ========== FOR ROUTE ==========
 
   async signup(data: SignupDto): Promise<IResponse<UserResponse>> {
-    try {
-      const { email, username, password } = data;
+    const { email, username, password } = data;
 
-      // Check email has exist in database
-      const currentUserWithEmail = await this.usersRepository.findOne({
-        where: { email },
-      });
-      if (currentUserWithEmail) {
-        if (!currentUserWithEmail.isActive) {
-          throw new BadRequestException(SIGN_UP_ROUTE.ACTIVE_ACCOUNT);
-        }
-        throw new BadRequestException(SIGN_UP_ROUTE.EMAIL_EXIST);
+    // Check email has exist in database
+    const currentUserWithEmail = await this.usersRepository.findOne({
+      where: { email },
+    });
+    if (currentUserWithEmail) {
+      if (!currentUserWithEmail.isActive) {
+        throw new BadRequestException(SIGN_UP_ROUTE.ACTIVE_ACCOUNT);
       }
-
-      // Check username has exist in database
-      const currentUserWithUsername = await this.usersRepository.findOne({
-        where: { username },
-      });
-      if (currentUserWithUsername) {
-        throw new BadRequestException(SIGN_UP_ROUTE.USERNAME_EXIST);
-      }
-
-      // Hash password and store in db
-      // hash password will be like this: ${HASH_PASSWORD}${JOIN_WITH}${SALT}
-      // Ex: $argon2id$v=19.58123123123
-      const hashPassword = await this.hashService.hash(password);
-      const newUser = this.usersRepository.create({
-        ...data,
-        password: hashPassword,
-        activeToken: randomBytes(32).toString('hex'),
-      });
-      await this.usersRepository.save(newUser);
-
-      return {
-        errCode: 0,
-        message: SIGN_UP_ROUTE.SUCCESS,
-        data: newUser,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      throw new BadRequestException(SIGN_UP_ROUTE.EMAIL_EXIST);
     }
+
+    // Check username has exist in database
+    const currentUserWithUsername = await this.usersRepository.findOne({
+      where: { username },
+    });
+    if (currentUserWithUsername) {
+      throw new BadRequestException(SIGN_UP_ROUTE.USERNAME_EXIST);
+    }
+
+    // Hash password and store in db
+    // hash password will be like this: ${HASH_PASSWORD}${JOIN_WITH}${SALT}
+    // Ex: $argon2id$v=19.58123123123
+    const hashPassword = await this.hashService.hash(password);
+    const newUser = this.usersRepository.create({
+      ...data,
+      password: hashPassword,
+      activeToken: randomBytes(32).toString('hex'),
+    });
+    await this.usersRepository.save(newUser);
+
+    return {
+      errCode: 0,
+      message: SIGN_UP_ROUTE.SUCCESS,
+      data: newUser,
+    };
   }
 
   async active({ token }: ActiveDto) {
+    const [userId, activeToken] = token.split('.');
+    if (!userId || !activeToken) {
+      throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
+    }
+
+    const user = await this.usersRepository.findOne({
+      where: { id: userId, activeToken },
+    });
+
+    if (!user) {
+      throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
+    }
+    if (user.isActive) {
+      throw new BadRequestException(ACTIVE_ROUTE.ACCOUNT_HAS_ALREADY_ACTIVATED);
+    }
+    const queryRunner = await this.helpers.startTransaction();
     try {
-      const [userId, activeToken] = token.split('.');
-      if (!userId || !activeToken) {
-        throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
-      }
+      // Init cart for user
+      const newCart = this.cartsServices.helpers.create({ userId });
 
-      const user = await this.usersRepository.findOne({
-        where: { id: userId, activeToken },
-      });
+      user.isActive = true;
+      user.activeToken = null;
 
-      if (!user) {
-        throw new BadRequestException(ACTIVE_ROUTE.TOKEN_INVALID);
-      }
-      if (user.isActive) {
-        throw new BadRequestException(
-          ACTIVE_ROUTE.ACCOUNT_HAS_ALREADY_ACTIVATED,
-        );
-      }
-      const queryRunner = await this.helpers.startTransaction();
-      try {
-        // Init cart for user
-        const newCart = this.cartsServices.helpers.create({ userId });
-
-        user.isActive = true;
-        user.activeToken = null;
-
-        await queryRunner.manager.getRepository(Users).save(user);
-        await queryRunner.manager.getRepository(Carts).save(newCart);
-        await queryRunner.commitTransaction();
-        return {
-          errCode: 0,
-          message: ACTIVE_ROUTE.SUCCESS,
-        };
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        await queryRunner.release();
-      }
+      await queryRunner.manager.getRepository(Users).save(user);
+      await queryRunner.manager.getRepository(Carts).save(newCart);
+      await queryRunner.commitTransaction();
+      return {
+        errCode: 0,
+        message: ACTIVE_ROUTE.SUCCESS,
+      };
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
     }
   }
 
   async signIn(data: SignInDto, res: Response) {
-    try {
-      const { usernameOrEmail, password } = data;
-      const user = await this.usersRepository.findOne({
-        where: [
-          { username: usernameOrEmail, isActive: true },
-          { email: usernameOrEmail, isActive: true },
-        ],
-      });
-      if (!user) {
-        throw new BadRequestException(SIGN_IN_ROUTE.INCORRECT);
-      }
-      const isValidPassword = await this.hashService.verify(
-        password,
-        user.password,
-      );
-
-      if (!isValidPassword) {
-        throw new BadRequestException(SIGN_IN_ROUTE.INCORRECT);
-      }
-
-      const [accessToken, refreshToken] = await this.generateAT_RT(user);
-
-      res.cookie(
-        'accessToken',
-        accessToken.value,
-        generateCookieOpts(accessToken.expiresIn),
-      );
-
-      res.cookie(
-        'refreshToken',
-        refreshToken.value,
-        generateCookieOpts(refreshToken.expiresIn),
-      );
-
-      await this.cacheManager.set(
-        `refreshToken:${user.id}`,
-        refreshToken.value,
-        refreshToken.expiresIn,
-      );
-      return {
-        errCode: 0,
-        message: SIGN_IN_ROUTE.SUCCESS,
-        data: user,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const { usernameOrEmail, password } = data;
+    const user = await this.usersRepository.findOne({
+      where: [
+        { username: usernameOrEmail, isActive: true },
+        { email: usernameOrEmail, isActive: true },
+      ],
+    });
+    if (!user) {
+      throw new BadRequestException(SIGN_IN_ROUTE.INCORRECT);
     }
+    const isValidPassword = await this.hashService.verify(
+      password,
+      user.password,
+    );
+
+    if (!isValidPassword) {
+      throw new BadRequestException(SIGN_IN_ROUTE.INCORRECT);
+    }
+
+    const [accessToken, refreshToken] = await this.generateAT_RT(user);
+
+    res.cookie(
+      'accessToken',
+      accessToken.value,
+      generateCookieOpts(accessToken.expiresIn),
+    );
+
+    res.cookie(
+      'refreshToken',
+      refreshToken.value,
+      generateCookieOpts(refreshToken.expiresIn),
+    );
+
+    await this.cacheManager.set(
+      `refreshToken:${user.id}`,
+      refreshToken.value,
+      refreshToken.expiresIn,
+    );
+    return {
+      errCode: 0,
+      message: SIGN_IN_ROUTE.SUCCESS,
+      data: user,
+    };
   }
 
   async signOut(res: Response, user: Users) {
-    try {
-      // set max age of cookies to 0
-      res.cookie('accessToken', null, generateCookieOpts(0));
-      res.cookie('refreshToken', null, generateCookieOpts(0));
-      await this.cacheManager.del(`refreshToken:${user.id}`);
-      await this.redisService.del(`refreshTokens:${user.id}`);
-      return {
-        errCode: 0,
-        message: 'Sign out success!',
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+    // set max age of cookies to 0
+    res.cookie('accessToken', null, generateCookieOpts(0));
+    res.cookie('refreshToken', null, generateCookieOpts(0));
+    await this.cacheManager.del(`refreshToken:${user.id}`);
+    await this.redisService.del(`refreshTokens:${user.id}`);
+    return {
+      errCode: 0,
+      message: 'Sign out success!',
+    };
   }
 
   async refreshToken(user: RefreshTokenResponse, res: Response) {
-    try {
-      const { rfToken, ...payload } = user;
-      const [accessToken, refreshToken] = await this.generateAT_RT(
-        payload as RefreshTokenPayload,
-      );
-      res.cookie(
-        'accessToken',
-        accessToken.value,
-        generateCookieOpts(accessToken.expiresIn),
-      );
-      res.cookie(
-        'refreshToken',
-        refreshToken.value,
-        generateCookieOpts(refreshToken.expiresIn),
-      );
+    const { rfToken, ...payload } = user;
+    const [accessToken, refreshToken] = await this.generateAT_RT(
+      payload as RefreshTokenPayload,
+    );
+    res.cookie(
+      'accessToken',
+      accessToken.value,
+      generateCookieOpts(accessToken.expiresIn),
+    );
+    res.cookie(
+      'refreshToken',
+      refreshToken.value,
+      generateCookieOpts(refreshToken.expiresIn),
+    );
 
-      await this.cacheManager.set(
-        `refreshToken:${user.id}`,
-        refreshToken.value,
-        refreshToken.expiresIn,
-      );
-      await this.redisService.setAdd(`refreshTokens:${user.id}`, user.rfToken);
-      return {
-        errCode: 0,
-        message: 'Refresh token success!',
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+    await this.cacheManager.set(
+      `refreshToken:${user.id}`,
+      refreshToken.value,
+      refreshToken.expiresIn,
+    );
+    await this.redisService.setAdd(`refreshTokens:${user.id}`, user.rfToken);
+    return {
+      errCode: 0,
+      message: 'Refresh token success!',
+    };
   }
 
   async forgotPassword(data: ForgotPasswordDto) {
-    try {
-      const { email } = data;
-      const currentUser = await this.usersRepository.findOne({
-        where: { email },
-      });
-      if (!currentUser) {
-        return {
-          errCode: 0,
-          message: FORGOT_ROUTE.SUCCESS,
-        };
-      }
-      // Check if already generate forgot token in database
-      const forgotTokenKey = `user:forgotToken:${currentUser.id}`;
-      const forgotTokenExists = await this.cacheManager.get(forgotTokenKey);
-      if (forgotTokenExists) {
-        return {
-          errCode: 0,
-          message: FORGOT_ROUTE.SUCCESS,
-        };
-      }
-
-      const forgotToken = randomBytes(32).toString('hex');
-      const forgotTokenHash = await this.hashService.hash(forgotToken);
-
-      await this.cacheManager.set(
-        forgotTokenKey,
-        forgotTokenHash,
-        1000 * 60 * 60,
-      );
-
-      this.nodemailerService.sendEmail({
-        to: currentUser.email,
-        subject: 'BanhTheCake - Forgot password',
-        html: generateHtml({
-          username: currentUser.username,
-          linkToActive: `http://localhost:3000/api/users/forgot?token=${forgotToken}&id=${currentUser.id}`,
-          label: 'forgot',
-        }),
-      });
+    const { email } = data;
+    const currentUser = await this.usersRepository.findOne({
+      where: { email },
+    });
+    if (!currentUser) {
       return {
         errCode: 0,
         message: FORGOT_ROUTE.SUCCESS,
       };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
     }
+    // Check if already generate forgot token in database
+    const forgotTokenKey = `user:forgotToken:${currentUser.id}`;
+    const forgotTokenExists = await this.cacheManager.get(forgotTokenKey);
+    if (forgotTokenExists) {
+      return {
+        errCode: 0,
+        message: FORGOT_ROUTE.SUCCESS,
+      };
+    }
+
+    const forgotToken = randomBytes(32).toString('hex');
+    const forgotTokenHash = await this.hashService.hash(forgotToken);
+
+    await this.cacheManager.set(
+      forgotTokenKey,
+      forgotTokenHash,
+      1000 * 60 * 60,
+    );
+
+    this.nodemailerService.sendEmail({
+      to: currentUser.email,
+      subject: 'BanhTheCake - Forgot password',
+      html: generateHtml({
+        username: currentUser.username,
+        linkToActive: `http://localhost:3000/api/users/forgot?token=${forgotToken}&id=${currentUser.id}`,
+        label: 'forgot',
+      }),
+    });
+    return {
+      errCode: 0,
+      message: FORGOT_ROUTE.SUCCESS,
+    };
   }
 
   async me(userId: string) {
-    try {
-      console.log('ME: ', userId);
-      let user = null;
-      const keyCache = `user:me:${userId}`;
-      const cache = await this.cacheManager.get<Users>(keyCache);
-      if (cache) {
-        user = cache;
-      } else {
-        const user = await this.usersRepository.findOne({
-          where: { id: userId },
-        });
-        if (!user) {
-          throw new BadRequestException('User not found');
-        }
-        await this.cacheManager.set(keyCache, user);
-      }
-      return user;
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
-  }
-
-  async resetPassword(data: ResetPasswordDto) {
-    try {
-      const { token, password, userId } = data;
-      const forgotTokenKey = `user:forgotToken:${userId}`;
-      const existToken = await this.cacheManager.get<string>(forgotTokenKey);
-      if (!existToken) {
-        throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
-      }
-      const isValid = await this.hashService.verify(token, existToken);
-      if (!isValid) {
-        throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
-      }
+    console.log('ME: ', userId);
+    let user = null;
+    const keyCache = `user:me:${userId}`;
+    const cache = await this.cacheManager.get<Users>(keyCache);
+    if (cache) {
+      user = cache;
+    } else {
       const user = await this.usersRepository.findOne({
         where: { id: userId },
       });
       if (!user) {
-        throw new BadRequestException(RESET_PASSWORD_ROUTE.USER_NOT_FOUND);
+        throw new BadRequestException('User not found');
       }
-      await Promise.all([
-        this.updatePassword(user, password),
-        this.cacheManager.del(forgotTokenKey),
-        this.cacheManager.del(`refreshToken:${userId}`),
-      ]);
-      return {
-        errCode: 0,
-        message: RESET_PASSWORD_ROUTE.SUCCESS,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      await this.cacheManager.set(keyCache, user);
     }
+    return user;
+  }
+
+  async resetPassword(data: ResetPasswordDto) {
+    const { token, password, userId } = data;
+    const forgotTokenKey = `user:forgotToken:${userId}`;
+    const existToken = await this.cacheManager.get<string>(forgotTokenKey);
+    if (!existToken) {
+      throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
+    }
+    const isValid = await this.hashService.verify(token, existToken);
+    if (!isValid) {
+      throw new BadRequestException(RESET_PASSWORD_ROUTE.INVALID_TOKEN);
+    }
+    const user = await this.usersRepository.findOne({
+      where: { id: userId },
+    });
+    if (!user) {
+      throw new BadRequestException(RESET_PASSWORD_ROUTE.USER_NOT_FOUND);
+    }
+    await Promise.all([
+      this.updatePassword(user, password),
+      this.cacheManager.del(forgotTokenKey),
+      this.cacheManager.del(`refreshToken:${userId}`),
+    ]);
+    return {
+      errCode: 0,
+      message: RESET_PASSWORD_ROUTE.SUCCESS,
+    };
   }
 
   async changePassword(data: ChangePasswordDto, user: Users) {
-    try {
-      const { password, newPassword } = data;
-      const currentUser = await this.usersRepository.findOne({
-        where: { id: user.id, isActive: true },
-      });
-      if (!currentUser) {
-        throw new BadRequestException(CHANGE_PASSWORD_ROUTE.USER_NOT_FOUND);
-      }
-      const isValidPassword = this.hashService.verify(
-        password,
-        currentUser.password,
-      );
-      if (!isValidPassword) {
-        throw new BadRequestException(CHANGE_PASSWORD_ROUTE.PASSWORD_INCORRECT);
-      }
-      await this.updatePassword(currentUser, newPassword);
-      return {
-        errCode: 0,
-        message: CHANGE_PASSWORD_ROUTE.SUCCESS,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const { password, newPassword } = data;
+    const currentUser = await this.usersRepository.findOne({
+      where: { id: user.id, isActive: true },
+    });
+    if (!currentUser) {
+      throw new BadRequestException(CHANGE_PASSWORD_ROUTE.USER_NOT_FOUND);
     }
+    const isValidPassword = this.hashService.verify(
+      password,
+      currentUser.password,
+    );
+    if (!isValidPassword) {
+      throw new BadRequestException(CHANGE_PASSWORD_ROUTE.PASSWORD_INCORRECT);
+    }
+    await this.updatePassword(currentUser, newPassword);
+    return {
+      errCode: 0,
+      message: CHANGE_PASSWORD_ROUTE.SUCCESS,
+    };
   }
 
   async changeInfo(data: InfoDto, user: Users) {
-    try {
-      let updateUser = await this.usersRepository.findOne({
-        where: { id: user.id },
-      });
-      if (!updateUser) {
-        throw new BadRequestException(INFO_ROUTE.USER_NOT_FOUND);
-      }
-      updateUser = {
-        ...updateUser,
-        ...data,
-      };
-      await this.usersRepository.save(updateUser);
-      await this.cacheManager.del(`user:me:${user.id}`);
-      return {
-        errCode: 0,
-        message: INFO_ROUTE.SUCCESS,
-        data: updateUser,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    let updateUser = await this.usersRepository.findOne({
+      where: { id: user.id },
+    });
+    if (!updateUser) {
+      throw new BadRequestException(INFO_ROUTE.USER_NOT_FOUND);
     }
+    updateUser = {
+      ...updateUser,
+      ...data,
+    };
+    await this.usersRepository.save(updateUser);
+    await this.cacheManager.del(`user:me:${user.id}`);
+    return {
+      errCode: 0,
+      message: INFO_ROUTE.SUCCESS,
+      data: updateUser,
+    };
   }
 
   async changeAvatar(data: AvatarDto, user: Users) {
@@ -540,124 +458,104 @@ export class UsersService {
       };
     } catch (error) {
       await queryRunner.rollbackTransaction();
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      throw error;
     } finally {
       await queryRunner.release();
     }
   }
 
   async follow(data: FollowDto, userId: string) {
-    try {
-      const { followingId, type } = data;
-      let typeReturn = '';
-      if (userId === followingId) {
-        throw new BadRequestException(FOLLOW_ROUTE.YOURSELF);
-      }
-      const isExist = await this.usersRepository.findOne({
-        where: { id: followingId },
-      });
-      if (!isExist) {
-        throw new BadRequestException(FOLLOW_ROUTE.USER_NOT_FOUND);
-      }
-      switch (type) {
-        case FollowType.FOLLOW:
-          const isFollowing = await this.followsRepository.findOne({
-            where: { userId, followingId },
-          });
-          if (isFollowing) {
-            throw new BadRequestException(FOLLOW_ROUTE.ALREADY_FOLLOW);
-          }
-          await this.followsRepository.save({
-            userId,
-            followingId,
-          });
-          typeReturn = 'Follow';
-          break;
-        case FollowType.UN_FOLLOW:
-          const followerEntity = await this.followsRepository.findOne({
-            where: { userId, followingId },
-          });
-          if (followerEntity) {
-            await this.followsRepository.remove(followerEntity);
-          }
-          typeReturn = 'Unfollow';
-          break;
-        default:
-          throw new BadRequestException('Wrong type of follow!');
-      }
-      return {
-        errCode: 0,
-        message: FOLLOW_ROUTE.SUCCESS(typeReturn),
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const { followingId, type } = data;
+    let typeReturn = '';
+    if (userId === followingId) {
+      throw new BadRequestException(FOLLOW_ROUTE.YOURSELF);
     }
+    const isExist = await this.usersRepository.findOne({
+      where: { id: followingId },
+    });
+    if (!isExist) {
+      throw new BadRequestException(FOLLOW_ROUTE.USER_NOT_FOUND);
+    }
+    switch (type) {
+      case FollowType.FOLLOW:
+        const isFollowing = await this.followsRepository.findOne({
+          where: { userId, followingId },
+        });
+        if (isFollowing) {
+          throw new BadRequestException(FOLLOW_ROUTE.ALREADY_FOLLOW);
+        }
+        await this.followsRepository.save({
+          userId,
+          followingId,
+        });
+        typeReturn = 'Follow';
+        break;
+      case FollowType.UN_FOLLOW:
+        const followerEntity = await this.followsRepository.findOne({
+          where: { userId, followingId },
+        });
+        if (followerEntity) {
+          await this.followsRepository.remove(followerEntity);
+        }
+        typeReturn = 'Unfollow';
+        break;
+      default:
+        throw new BadRequestException('Wrong type of follow!');
+    }
+    return {
+      errCode: 0,
+      message: FOLLOW_ROUTE.SUCCESS(typeReturn),
+    };
   }
 
   async getFollow(userId: string, query: FollowQueryDto) {
-    try {
-      const { cursor, limit = 4, type = FollowStatus.FOLLOWER } = query;
-      let followQueryBuilder =
-        this.followsRepository.createQueryBuilder('follow');
-      let total = 0;
-      switch (type) {
-        case FollowStatus.FOLLOWER:
-          total = await this.followsRepository.count({
-            where: { followingId: userId },
-          });
-          followQueryBuilder = followQueryBuilder
-            .leftJoinAndSelect('follow.follower', 'follower')
-            .where('follow.followingId = :id', { id: userId });
-          break;
-        case FollowStatus.FOLLOWING:
-          total = await this.followsRepository.count({
-            where: { userId: userId },
-          });
-          followQueryBuilder = followQueryBuilder
-            .leftJoinAndSelect('follow.following', 'following')
-            .where('follow.userId = :id', { id: userId });
-          break;
-        default:
-          throw new BadRequestException('Wrong type of follow!');
-      }
-      const follows = await followQueryBuilder
-        .andWhere('follow.created_at < :cursor', {
-          cursor: cursor ? new Date(cursor) : new Date(),
-        })
-        .take(limit)
-        .orderBy('follow.created_at', 'DESC')
-        .getMany();
-      const result = follows.map((item) => {
-        if (type === FollowStatus.FOLLOWER) {
-          return item.follower;
-        }
-        return item.following;
-      });
-      const lastItem = follows[follows.length - 1];
-      let next = null;
-      if (lastItem) {
-        next = new Date(lastItem.created_at).getTime();
-      }
-      return {
-        limit,
-        next,
-        total,
-        data: result,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const { cursor, limit = 4, type = FollowStatus.FOLLOWER } = query;
+    let followQueryBuilder =
+      this.followsRepository.createQueryBuilder('follow');
+    let total = 0;
+    switch (type) {
+      case FollowStatus.FOLLOWER:
+        total = await this.followsRepository.count({
+          where: { followingId: userId },
+        });
+        followQueryBuilder = followQueryBuilder
+          .leftJoinAndSelect('follow.follower', 'follower')
+          .where('follow.followingId = :id', { id: userId });
+        break;
+      case FollowStatus.FOLLOWING:
+        total = await this.followsRepository.count({
+          where: { userId: userId },
+        });
+        followQueryBuilder = followQueryBuilder
+          .leftJoinAndSelect('follow.following', 'following')
+          .where('follow.userId = :id', { id: userId });
+        break;
+      default:
+        throw new BadRequestException('Wrong type of follow!');
     }
+    const follows = await followQueryBuilder
+      .andWhere('follow.created_at < :cursor', {
+        cursor: cursor ? new Date(cursor) : new Date(),
+      })
+      .take(limit)
+      .orderBy('follow.created_at', 'DESC')
+      .getMany();
+    const result = follows.map((item) => {
+      if (type === FollowStatus.FOLLOWER) {
+        return item.follower;
+      }
+      return item.following;
+    });
+    const lastItem = follows[follows.length - 1];
+    let next = null;
+    if (lastItem) {
+      next = new Date(lastItem.created_at).getTime();
+    }
+    return {
+      limit,
+      next,
+      total,
+      data: result,
+    };
   }
 }

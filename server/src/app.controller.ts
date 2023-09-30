@@ -29,7 +29,7 @@ interface IMockData {
   category: string;
   id: number;
 }
-const mockOwnerId = '5bac929c-8f3a-4af9-bfd8-33989fe289ec';
+const mockOwnerId = 'a46fb385-bb98-4c30-aec1-a436610a954d';
 const mockCategories = [
   { label: dienThoaiVaPhuKien[0].category, items: dienThoaiVaPhuKien },
   { label: mayAnhVaMayQuay[0].category, items: mayAnhVaMayQuay },
@@ -129,9 +129,7 @@ export class AppController {
 
   @Get('mock/elastic')
   async mockElastic() {
-    const products = await this.productsService.helpers.createQueryBuilder
-      .product('products')
-      .getMany();
+    const products = await this.productsService.helpers.mock.getAll();
     const operations = products.flatMap((doc) => [
       { index: { _index: 'products', _id: doc.id } },
       doc,

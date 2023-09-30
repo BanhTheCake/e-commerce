@@ -26,15 +26,13 @@ import {
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import {
   BadRequestException,
-  HttpException,
   Inject,
   Injectable,
-  InternalServerErrorException,
   forwardRef,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cache } from 'cache-manager';
-import { cloneDeep, isEmpty, isEqual, omit, pick, pickBy } from 'lodash';
+import { cloneDeep, isEqual, omit, pickBy } from 'lodash';
 import { DataSource, In, Repository } from 'typeorm';
 import { CreateNewDto } from './dto/create-new.dto';
 import { DeleteDto } from './dto/delete.dto';
@@ -105,7 +103,31 @@ export class ProductsService {
         return await this.productsCategoriesRepository.save(productCategory);
       },
     },
+    mock: {
+      getAll: async () => {
+        const products = await this.productsRepository
+          .createQueryBuilder('products')
+          .leftJoinAndSelect('products.productCategory', 'productCategory')
+          .leftJoinAndSelect('productCategory.category', 'categories')
+          .leftJoinAndSelect('products.images', 'images')
+          .getMany();
+        return products.map((product) => this.serializeProduct(product));
+      },
+    },
   };
+
+  async validateDetails(productDetailIds: string[]) {
+    for (const productDetailId of productDetailIds) {
+      const productDetail = await this.productDetailsRepository.findOne({
+        where: { id: productDetailId },
+      });
+      if (!productDetail) {
+        throw new BadRequestException(
+          `Product detail with id ${productDetailId} not found!`,
+        );
+      }
+    }
+  }
 
   private serializeProduct(product: Products) {
     let result: ProductResponse = {
@@ -161,613 +183,553 @@ export class ProductsService {
   // ========== FOR ROUTE ==========
 
   async createNew(data: CreateNewDto, user: Users) {
-    try {
-      const { label, categories: categoriesId, details, images } = data;
-      const slug = slugifyFn(label);
-      const existingProduct = await this.productsRepository.findOne({
-        where: [{ label }, { slug }],
-      });
-      if (existingProduct) {
-        throw new BadRequestException(CREATE_PRODUCT_ROUTE.EXIST_LABEL);
-      }
-      const categories = await this.categoriesService.helpers.validate(
-        categoriesId,
-      );
-      const newProduct = this.productsRepository.create({
-        ...omit(data, ['images', 'categories', 'details']),
-        slug,
-        ownerId: user.id,
-      });
-
-      // Add transaction
-      const queryRunner = await this.helpers.starTransaction();
-      try {
-        await queryRunner.manager.save(newProduct);
-        // create product category
-        const newProductsCategories = categories.map((category) => ({
-          productId: newProduct.id,
-          categoryId: category.id,
-        }));
-        const newProductsCategoriesEntities =
-          this.productsCategoriesRepository.create(newProductsCategories);
-
-        // create product details
-        const newDetails = details.map((detail) => ({
-          name: detail.name,
-          value: detail.value,
-          productId: newProduct.id,
-        }));
-        const newDetailsEntities =
-          this.productDetailsRepository.create(newDetails);
-
-        // create images
-        const newImages = images.map((image) => ({
-          url: image.url,
-          publicKey: image.publicId,
-          role: ImageType.PRODUCT,
-          productId: newProduct.id,
-        }));
-        const newImageEntities = this.imagesService.helpers.create(newImages);
-
-        await queryRunner.manager.save(newImageEntities);
-        await queryRunner.manager.save(newProductsCategoriesEntities);
-        await queryRunner.manager.save(newDetailsEntities);
-        await queryRunner.commitTransaction();
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        await queryRunner.release();
-      }
-      const result = await this.getOne(newProduct.id);
-      await this.productQueue.add(
-        'Add new product',
-        new CreateNewQueue('products', result.id, result),
-      );
-      return {
-        errCode: 0,
-        message: CREATE_PRODUCT_ROUTE.SUCCESS,
-        data: result,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const { label, categories: categoriesId, details, images } = data;
+    const slug = slugifyFn(label);
+    const existingProduct = await this.productsRepository.findOne({
+      where: [{ label }, { slug }],
+    });
+    if (existingProduct) {
+      throw new BadRequestException(CREATE_PRODUCT_ROUTE.EXIST_LABEL);
     }
+    const categories = await this.categoriesService.helpers.validate(
+      categoriesId,
+    );
+    const newProduct = this.productsRepository.create({
+      ...omit(data, ['images', 'categories', 'details']),
+      slug,
+      ownerId: user.id,
+    });
+
+    // Add transaction
+    const queryRunner = await this.helpers.starTransaction();
+    try {
+      await queryRunner.manager.save(newProduct);
+
+      // create product category
+      const newProductsCategories = categories.map((category) => ({
+        productId: newProduct.id,
+        categoryId: category.id,
+      }));
+      const newProductsCategoriesEntities =
+        this.productsCategoriesRepository.create(newProductsCategories);
+
+      // create product details
+      const newDetails = details.map((detail) => ({
+        name: detail.name,
+        value: detail.value,
+        productId: newProduct.id,
+      }));
+      const newDetailsEntities =
+        this.productDetailsRepository.create(newDetails);
+
+      // create images
+      const newImages = images.map((image) => ({
+        url: image.url,
+        publicKey: image.publicId,
+        role: ImageType.PRODUCT,
+        productId: newProduct.id,
+      }));
+      const newImageEntities = this.imagesService.helpers.create(newImages);
+
+      await queryRunner.manager.save(newImageEntities);
+      await queryRunner.manager.save(newProductsCategoriesEntities);
+      await queryRunner.manager.save(newDetailsEntities);
+      await queryRunner.commitTransaction();
+    } catch (error) {
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      await queryRunner.release();
+    }
+    const result = await this.getOne(newProduct.id);
+    await this.productQueue.add(
+      'Add new product',
+      new CreateNewQueue('products', result.id, result),
+    );
+    return {
+      errCode: 0,
+      message: CREATE_PRODUCT_ROUTE.SUCCESS,
+      data: result,
+    };
   }
 
   async findOne({ id }: GetOneParamDto) {
-    try {
-      const cache = await this.cacheManager.get<ProductResponse>(
-        `product:${id}`,
-      );
-      if (cache) {
-        return {
-          errCode: 0,
-          message: GET_PRODUCT_ROUTE.SUCCESS(id),
-          data: cache,
-          cache: true,
-        };
-      }
-      const data = await this.getOne(id);
-      await this.cacheManager.set(`product:${id}`, data);
+    const cache = await this.cacheManager.get<ProductResponse>(`product:${id}`);
+    if (cache) {
       return {
         errCode: 0,
         message: GET_PRODUCT_ROUTE.SUCCESS(id),
-        data,
-        cache: false,
+        data: cache,
+        cache: true,
       };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
     }
+    const data = await this.getOne(id);
+    await this.cacheManager.set(`product:${id}`, data);
+    return {
+      errCode: 0,
+      message: GET_PRODUCT_ROUTE.SUCCESS(id),
+      data,
+      cache: false,
+    };
   }
 
   // Soft delete
   async deleteOne({ id }: DeleteDto) {
-    try {
-      const currentProduct = await this.productsRepository.findOne({
-        where: { id },
-      });
-      if (!currentProduct) {
-        throw new BadRequestException(DELETE_PRODUCT_ROUTE.NOT_FOUND);
-      }
-      await this.productsRepository.softRemove(currentProduct);
-      await this.elasticService.deleteDoc({ index: 'products', id });
-      await this.cacheManager.del(`product:${id}`);
-      return {
-        errCode: 0,
-        message: DELETE_PRODUCT_ROUTE.SUCCESS(id),
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const currentProduct = await this.productsRepository.findOne({
+      where: { id },
+    });
+    if (!currentProduct) {
+      throw new BadRequestException(DELETE_PRODUCT_ROUTE.NOT_FOUND);
     }
+    await this.productsRepository.softRemove(currentProduct);
+    await this.elasticService.deleteDoc({ index: 'products', id });
+    await this.cacheManager.del(`product:${id}`);
+    return {
+      errCode: 0,
+      message: DELETE_PRODUCT_ROUTE.SUCCESS(id),
+    };
   }
 
   async updateOne({ id }: UpdateParamDto, data: UpdateBodyDto) {
+    let currentProduct = await this.getOne(id);
+    const copyCurrentProduct = cloneDeep(currentProduct);
+    if (!currentProduct) {
+      throw new BadRequestException(UPDATE_PRODUCT_ROUTE.NOT_FOUND);
+    }
+    const slug = slugifyFn(data.label ?? currentProduct.label);
+    currentProduct = {
+      ...currentProduct,
+      ...omit(data, ['categories', 'details', 'images']),
+      slug,
+    };
     const queryRunner = await this.helpers.starTransaction();
     try {
-      let currentProduct = await this.getOne(id);
-      const copyCurrentProduct = cloneDeep(currentProduct);
-      if (!currentProduct) {
-        throw new BadRequestException(UPDATE_PRODUCT_ROUTE.NOT_FOUND);
+      await queryRunner.manager.getRepository(Products).save(currentProduct);
+      if (data.categories) {
+        // delete product-category in database
+        const deleteProductCategoryIds = data.categories
+          .filter((category) => {
+            return category.type === 'DEL';
+          })
+          .map((category) => category.id);
+        const deleteCategoryEntities =
+          await this.productsCategoriesRepository.find({
+            where: {
+              categoryId: In(deleteProductCategoryIds),
+            },
+          });
+
+        // create new product-category
+        const newProductCategories = data.categories
+          .filter((category) => {
+            return category.type === 'ADD';
+          })
+          .map((category) => ({
+            categoryId: category.id,
+            productId: currentProduct.id,
+          }));
+        await this.categoriesService.helpers.validate(
+          newProductCategories.map((category) => category.categoryId),
+        );
+        const newCategoryEntities =
+          this.productsCategoriesRepository.create(newProductCategories);
+
+        await queryRunner.manager.remove(deleteCategoryEntities);
+        await queryRunner.manager.save(newCategoryEntities);
       }
-      const slug = slugifyFn(data.label ?? currentProduct.label);
-      currentProduct = {
-        ...currentProduct,
-        ...omit(data, ['categories', 'details', 'images']),
-        slug,
-      };
-      try {
-        await queryRunner.manager.getRepository(Products).save(currentProduct);
-        if (data.categories) {
-          // delete product-category in database
-          const deleteProductCategoryIds = data.categories
-            .filter((category) => {
-              return category.type === 'DEL';
-            })
-            .map((category) => category.id);
-          const deleteCategoryEntities =
-            await this.productsCategoriesRepository.find({
-              where: {
-                categoryId: In(deleteProductCategoryIds),
-              },
-            });
+      if (data.images) {
+        // delete images in database
+        const deleteImages = data.images.filter((image) => {
+          return image.type === 'DEL';
+        });
+        const deleteImageEntities =
+          this.imagesService.helpers.create(deleteImages);
 
-          // create new product-category
-          const newProductCategories = data.categories
-            .filter((category) => {
-              return category.type === 'ADD';
-            })
-            .map((category) => ({
-              categoryId: category.id,
-              productId: currentProduct.id,
-            }));
-          await this.categoriesService.helpers.validate(
-            newProductCategories.map((category) => category.categoryId),
-          );
-          const newCategoryEntities =
-            this.productsCategoriesRepository.create(newProductCategories);
+        // create new images
+        const newImages = data.images
+          .filter((image) => {
+            return image.type === 'ADD';
+          })
+          .map((image) => ({
+            url: image.url,
+            publicKey: image.publicId,
+            role: ImageType.PRODUCT,
+            productId: currentProduct.id,
+          }));
+        const newImageEntities = this.imagesService.helpers.create(newImages);
 
-          await queryRunner.manager.remove(deleteCategoryEntities);
-          await queryRunner.manager.save(newCategoryEntities);
-        }
-        if (data.images) {
-          // delete images in database
-          const deleteImages = data.images.filter((image) => {
-            return image.type === 'DEL';
-          });
-          const deleteImageEntities =
-            this.imagesService.helpers.create(deleteImages);
-
-          // create new images
-          const newImages = data.images
-            .filter((image) => {
-              return image.type === 'ADD';
-            })
-            .map((image) => ({
-              url: image.url,
-              publicKey: image.publicId,
-              role: ImageType.PRODUCT,
-              productId: currentProduct.id,
-            }));
-          const newImageEntities = this.imagesService.helpers.create(newImages);
-
-          await queryRunner.manager.remove(deleteImageEntities);
-          await queryRunner.manager.save(newImageEntities);
-        }
-        if (data.details) {
-          // delete details in database
-          const deleteDetails = data.details.filter((detail) => {
-            return detail.type === 'DEL';
-          });
-          const deleteDetailEntities =
-            this.productDetailsRepository.create(deleteDetails);
-
-          // create new details
-          const newDetail = data.details
-            .filter((detail) => {
-              return detail.type === 'ADD';
-            })
-            .map((detail) => ({
-              name: detail.key,
-              value: detail.value,
-              productId: currentProduct.id,
-            }));
-          const newDetailEntities =
-            this.productDetailsRepository.create(newDetail);
-
-          // modify details
-          const modifyDetail = data.details.filter((detail) => {
-            return detail.type === 'MODIFY';
-          });
-          const modifyDetailEntities =
-            this.productDetailsRepository.create(modifyDetail);
-
-          await queryRunner.manager.remove(deleteDetailEntities);
-          await queryRunner.manager.save([
-            ...newDetailEntities,
-            ...modifyDetailEntities,
-          ]);
-        }
-        await this.cacheManager.del('product:' + id);
-        await queryRunner.commitTransaction();
-      } catch (error) {
-        await queryRunner.rollbackTransaction();
-        throw error;
-      } finally {
-        queryRunner.release();
+        await queryRunner.manager.remove(deleteImageEntities);
+        await queryRunner.manager.save(newImageEntities);
       }
-      const result = await this.getOne(currentProduct.id);
+      if (data.details) {
+        // delete details in database
+        const deleteDetails = data.details.filter((detail) => {
+          return detail.type === 'DEL';
+        });
+        const deleteDetailEntities =
+          this.productDetailsRepository.create(deleteDetails);
 
-      // Get difference value between two objects
-      const changes = pickBy(
-        result,
-        (v, k) => !isEqual(copyCurrentProduct[k], v),
-      );
-      await this.elasticService.updateDoc({
-        index: 'products',
-        id: result.id,
-        doc: changes,
-      });
+        // create new details
+        const newDetail = data.details
+          .filter((detail) => {
+            return detail.type === 'ADD';
+          })
+          .map((detail) => ({
+            name: detail.name,
+            value: detail.value,
+            productId: currentProduct.id,
+          }));
+        const newDetailEntities =
+          this.productDetailsRepository.create(newDetail);
 
-      return {
-        errCode: 0,
-        message: UPDATE_PRODUCT_ROUTE.SUCCESS,
-        data: result,
-      };
+        // modify details
+        const modifyDetail = data.details.filter((detail) => {
+          return detail.type === 'MODIFY';
+        });
+        await this.validateDetails(modifyDetail.map((detail) => detail.id));
+        const modifyDetailEntities =
+          this.productDetailsRepository.create(modifyDetail);
+
+        await queryRunner.manager.remove(deleteDetailEntities);
+        await queryRunner.manager.save([
+          ...newDetailEntities,
+          ...modifyDetailEntities,
+        ]);
+      }
+      await queryRunner.commitTransaction();
     } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      await queryRunner.rollbackTransaction();
+      throw error;
+    } finally {
+      queryRunner.release();
     }
+    const result = await this.getOne(currentProduct.id);
+
+    // Get difference value between two objects
+    const changes = pickBy(
+      result,
+      (v, k) => !isEqual(copyCurrentProduct[k], v),
+    );
+    await this.elasticService.updateDoc({
+      index: 'products',
+      id: result.id,
+      doc: changes,
+    });
+    await this.cacheManager.del('product:' + id);
+
+    return {
+      errCode: 0,
+      message: UPDATE_PRODUCT_ROUTE.SUCCESS,
+      data: result,
+    };
   }
 
   async findAll(query: GetAllQueryDto): Promise<IPagination<any>> {
-    try {
-      const {
-        limit,
-        page,
-        order = ORDER.ASC,
-        sortBy = 'label',
-        value: star,
-        category = '',
-      } = query;
-      const offset = limit * (page - 1);
-      const productsBuilder = this.productsRepository
-        .createQueryBuilder('products')
-        .leftJoinAndSelect('products.productCategory', 'productCategory')
-        .leftJoinAndSelect('productCategory.category', 'categories')
-        .leftJoinAndSelect('products.images', 'images')
-        .skip(offset)
-        .take(limit)
-        .orderBy(`products.${sortBy}`, order);
+    const {
+      limit,
+      page,
+      order = ORDER.ASC,
+      sortBy = 'label',
+      value: star,
+      category = '',
+    } = query;
+    const offset = limit * (page - 1);
+    const productsBuilder = this.productsRepository
+      .createQueryBuilder('products')
+      .leftJoinAndSelect('products.productCategory', 'productCategory')
+      .leftJoinAndSelect('productCategory.category', 'categories')
+      .leftJoinAndSelect('products.images', 'images')
+      .skip(offset)
+      .take(limit)
+      .orderBy(`products.${sortBy}`, order);
 
-      if (star) {
-        productsBuilder.where('products.star = :star', { star });
-      }
-
-      if (category) {
-        productsBuilder.andWhere((qb) => {
-          const subQuery = qb
-            .subQuery()
-            .select('productCategory.productId')
-            .from(Products_Categories, 'productCategory')
-            .leftJoin('productCategory.category', 'category')
-            .where('category.slug = :slug', { slug: category })
-            .getQuery();
-          return 'products.id IN ' + subQuery;
-        });
-      }
-
-      const [products, productsCount] = await productsBuilder.getManyAndCount();
-
-      const { total, hasNextPage, hasPrevPage, pages } = paginationFn({
-        limit,
-        page,
-        total: productsCount,
-      });
-      const data = products.map((product) => this.serializeProduct(product));
-      return {
-        limit,
-        page,
-        total,
-        pages,
-        hasNextPage,
-        hasPrevPage,
-        data,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    if (star) {
+      productsBuilder.where('products.star = :star', { star });
     }
+
+    if (category) {
+      productsBuilder.andWhere((qb) => {
+        const subQuery = qb
+          .subQuery()
+          .select('productCategory.productId')
+          .from(Products_Categories, 'productCategory')
+          .leftJoin('productCategory.category', 'category')
+          .where('category.slug = :slug', { slug: category })
+          .getQuery();
+        return 'products.id IN ' + subQuery;
+      });
+    }
+
+    const [products, productsCount] = await productsBuilder.getManyAndCount();
+
+    const { total, hasNextPage, hasPrevPage, pages } = paginationFn({
+      limit,
+      page,
+      total: productsCount,
+    });
+    const data = products.map((product) => this.serializeProduct(product));
+    return {
+      limit,
+      page,
+      total,
+      pages,
+      hasNextPage,
+      hasPrevPage,
+      data,
+    };
   }
 
   async autoSuggest({ q, limit = 10 }: SuggestDto) {
-    try {
-      const elasticResult = await this.elasticService.search<ProductResponse>({
-        _source: {
-          include: ['id', 'label'],
+    const elasticResult = await this.elasticService.search<ProductResponse>({
+      _source: {
+        include: ['id', 'label'],
+      },
+      index: 'products',
+      query: {
+        bool: {
+          should: [
+            {
+              match_phrase_prefix: {
+                'label.startWith': {
+                  query: q,
+                },
+              },
+            },
+            {
+              match: {
+                label: {
+                  query: q,
+                  operator: 'and',
+                },
+              },
+            },
+            {
+              match: {
+                'label.normalize': {
+                  query: q,
+                  operator: 'and',
+                },
+              },
+            },
+          ],
         },
-        index: 'products',
-        query: {
-          bool: {
-            should: [
-              {
-                match_phrase_prefix: {
-                  'label.startWith': {
-                    query: q,
-                  },
-                },
-              },
-              {
-                match: {
-                  label: {
-                    query: q,
-                    operator: 'and',
-                  },
-                },
-              },
-              {
-                match: {
-                  'label.normalize': {
-                    query: q,
-                    operator: 'and',
-                  },
-                },
-              },
-            ],
-          },
-        },
-        size: limit,
-      });
-      const result = elasticResult.hits.hits.map((item) => {
-        return {
-          id: item._source.id,
-          query: item._source.label,
-        };
-      });
+      },
+      size: limit,
+    });
+    const result = elasticResult.hits.hits.map((item) => {
       return {
-        errCode: 0,
-        message: SUGGEST_ROUTE.SUCCESS,
-        data: result,
+        id: item._source.id,
+        query: item._source.label,
       };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+    });
+    return {
+      errCode: 0,
+      message: SUGGEST_ROUTE.SUCCESS,
+      data: result,
+    };
   }
 
   async findAllElastic(query: GetAllQueryDto) {
-    try {
-      const {
-        limit,
-        page,
-        order = ORDER.ASC,
-        sortBy = '',
-        value: star,
-        category = '',
-        q = '',
-      } = query;
-      const offset = limit * (page - 1);
+    const {
+      limit,
+      page,
+      order = ORDER.ASC,
+      sortBy = '',
+      value: star,
+      category = '',
+      q = '',
+    } = query;
+    const offset = limit * (page - 1);
 
-      const keyCache = `products:${slugifyFn(
-        q,
-      )}:${limit}:${page}:${order}:${sortBy}:${star || ''}:${category}`;
-      const cache = await this.cacheManager.get<{
-        total: number;
-        data: ProductResponse[];
-      }>(keyCache);
+    const keyCache = `products:${slugifyFn(
+      q,
+    )}:${limit}:${page}:${order}:${sortBy}:${star || ''}:${category}`;
+    const cache = await this.cacheManager.get<{
+      total: number;
+      data: ProductResponse[];
+    }>(keyCache);
 
-      let total = 0;
-      let data = null;
-      let isCache = false;
+    let total = 0;
+    let data = null;
+    let isCache = false;
 
-      if (cache) {
-        total = cache.total;
-        data = cache.data;
-        isCache = true;
-      } else {
-        const sort: Sort = sortBy
-          ? [
-              {
-                [sortBy]: {
-                  order: order === 'DESC' ? 'desc' : 'asc',
-                },
-              },
-            ]
-          : [];
-
-        let filter: QueryDslQueryContainer[] = [];
-        const must: QueryDslQueryContainer[] = [
-          this.handleQuery(q, {
-            multi_match: {
-              query: q,
-              operator: 'and',
-              fields: ['label^2', 'label.normalize'],
-            },
-          }),
-        ];
-        const should: QueryDslQueryContainer[] = [
-          this.handleQuery(q, {
-            match_phrase: {
-              'label.autocomplete': {
-                query: q,
-                slop: 10,
-                // https://www.youtube.com/watch?v=V1Eo429iS9c
-              },
-            },
-          }),
-        ];
-
-        if (star) {
-          filter = [{ term: { star } }];
-        }
-
-        if (category) {
-          filter = [
-            ...filter,
+    if (cache) {
+      total = cache.total;
+      data = cache.data;
+      isCache = true;
+    } else {
+      const sort: Sort = sortBy
+        ? [
             {
-              nested: {
-                path: 'categories',
-                query: {
-                  bool: {
-                    filter: [
-                      {
-                        term: {
-                          'categories.slug': category,
-                        },
-                      },
-                    ],
-                  },
-                },
+              [sortBy]: {
+                order: order === 'DESC' ? 'desc' : 'asc',
               },
             },
-          ];
-        }
-        const elasticCount = await this.elasticService.count({
-          index: 'products',
-          query: {
-            bool: {
-              must: must,
-              filter: filter,
-            },
-          },
-        });
-        const elasticResult = await this.elasticService.search<ProductResponse>(
-          {
-            index: 'products',
-            _source: {
-              exclude: ['description'],
-            },
-            query: {
-              bool: {
-                must: must,
-                should: should,
-                filter: filter,
-              },
-            },
-            sort,
-            from: offset,
-            size: limit,
-          },
-        );
+          ]
+        : [];
 
-        total = elasticCount.count;
-        data = elasticResult.hits.hits.map((productSource) => {
-          return productSource._source;
-        });
-        await this.cacheManager.set(keyCache, {
-          total,
-          data,
-        });
+      let filter: QueryDslQueryContainer[] = [];
+      const must: QueryDslQueryContainer[] = [
+        this.handleQuery(q, {
+          multi_match: {
+            query: q,
+            operator: 'and',
+            fields: ['label^2', 'label.normalize'],
+          },
+        }),
+      ];
+      const should: QueryDslQueryContainer[] = [
+        this.handleQuery(q, {
+          match_phrase: {
+            'label.autocomplete': {
+              query: q,
+              slop: 10,
+              // https://www.youtube.com/watch?v=V1Eo429iS9c
+            },
+          },
+        }),
+      ];
+
+      if (star) {
+        filter = [{ term: { star } }];
       }
 
-      const { hasNextPage, hasPrevPage, pages } = paginationFn({
-        limit,
-        page,
-        total,
+      if (category) {
+        filter = [
+          ...filter,
+          {
+            nested: {
+              path: 'categories',
+              query: {
+                bool: {
+                  filter: [
+                    {
+                      term: {
+                        'categories.slug': category,
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        ];
+      }
+      const elasticCount = await this.elasticService.count({
+        index: 'products',
+        query: {
+          bool: {
+            must: must,
+            filter: filter,
+          },
+        },
+      });
+      const elasticResult = await this.elasticService.search<ProductResponse>({
+        index: 'products',
+        _source: {
+          exclude: ['description'],
+        },
+        query: {
+          bool: {
+            must: must,
+            should: should,
+            filter: filter,
+          },
+        },
+        sort,
+        from: offset,
+        size: limit,
       });
 
-      return {
-        limit,
-        page,
+      total = elasticCount.count;
+      data = elasticResult.hits.hits.map((productSource) => {
+        return productSource._source;
+      });
+      await this.cacheManager.set(keyCache, {
         total,
-        pages,
-        hasNextPage,
-        hasPrevPage,
         data,
-        cache: isCache,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+      });
     }
+
+    const { hasNextPage, hasPrevPage, pages } = paginationFn({
+      limit,
+      page,
+      total,
+    });
+
+    return {
+      limit,
+      page,
+      total,
+      pages,
+      hasNextPage,
+      hasPrevPage,
+      data,
+      cache: isCache,
+    };
   }
 
   async findAllRelative(data: GetRelativesDto) {
-    try {
-      const { userId, page, limit } = data;
-      const offset = limit * (page - 1);
-      let followerIds = [];
-      let must_not: QueryDslQueryContainer[] = [];
-      let total = 0;
-      let rs = null;
-      let isCache = false;
+    const { userId, page, limit } = data;
+    const offset = limit * (page - 1);
+    let followerIds = [];
+    let must_not: QueryDslQueryContainer[] = [];
+    let total = 0;
+    let rs = null;
+    let isCache = false;
 
-      const keyCache = `products:${limit}:${page}:${userId}`;
-      const cache = await this.cacheManager.get<{
-        total: number;
-        data: ProductResponse[];
-      }>(keyCache);
+    const keyCache = `products:${limit}:${page}:${userId}`;
+    const cache = await this.cacheManager.get<{
+      total: number;
+      data: ProductResponse[];
+    }>(keyCache);
 
-      if (cache) {
-        total = cache.total;
-        rs = cache.data;
-        isCache = true;
-      } else {
-        if (userId) {
-          const followers = await this.userServices.helpers.createQueryBuilder
-            .follow('follow')
-            .where('follow.userId = :id', { id: userId })
-            .select(['follow.followingId', 'follow.userId'])
-            .orderBy('follow.created_at', 'DESC')
-            .take(10)
-            .getMany();
-          followerIds = followers.map((follower) => {
-            return follower.followingId;
-          });
-          must_not = [{ term: { ownerId: userId } }];
-        }
-        const elasticCount = await this.elasticService.count({
-          index: 'products',
-          query: {
-            bool: {
-              must: [{ match_all: {} }],
-              must_not: must_not,
-            },
-          },
+    if (cache) {
+      total = cache.total;
+      rs = cache.data;
+      isCache = true;
+    } else {
+      if (userId) {
+        const followers = await this.userServices.helpers.createQueryBuilder
+          .follow('follow')
+          .where('follow.userId = :id', { id: userId })
+          .select(['follow.followingId', 'follow.userId'])
+          .orderBy('follow.created_at', 'DESC')
+          .take(10)
+          .getMany();
+        followerIds = followers.map((follower) => {
+          return follower.followingId;
         });
-        const elasticResult = await this.elasticService.search<ProductResponse>(
-          {
-            index: 'products',
-            _source: {
-              exclude: ['description'],
-            },
+        must_not = [{ term: { ownerId: userId } }];
+      }
+      const elasticCount = await this.elasticService.count({
+        index: 'products',
+        query: {
+          bool: {
+            must: [{ match_all: {} }],
+            must_not: must_not,
+          },
+        },
+      });
+      const elasticResult = await this.elasticService.search<ProductResponse>({
+        index: 'products',
+        _source: {
+          exclude: ['description'],
+        },
+        query: {
+          function_score: {
             query: {
-              function_score: {
-                query: {
-                  bool: {
-                    must: [{ match_all: {} }],
-                    must_not: must_not,
-                  },
-                },
-                functions: [
-                  {
-                    script_score: {
-                      script: {
-                        lang: 'painless',
-                        source: `   
+              bool: {
+                must: [{ match_all: {} }],
+                must_not: must_not,
+              },
+            },
+            functions: [
+              {
+                script_score: {
+                  script: {
+                    lang: 'painless',
+                    source: `   
                       double totalScore = 0.0;
                       if (params['ownerIds'].contains(doc['ownerId'].value)) {
                         totalScore = totalScore + 1
@@ -777,51 +739,42 @@ export class ProductsService {
                       totalScore = totalScore + dateScore;
                       return totalScore;
                       `,
-                        params: {
-                          ownerIds: followerIds,
-                        },
-                      },
+                    params: {
+                      ownerIds: followerIds,
                     },
                   },
-                ],
+                },
               },
-            },
-            from: offset,
-            size: limit,
+            ],
           },
-        );
-        total = elasticCount.count;
-        rs = elasticResult.hits.hits.map((productSource) => {
-          return productSource._source;
-        });
-        await this.cacheManager.set(keyCache, {
-          total,
-          data: rs,
-        });
-      }
-
-      const { hasNextPage, hasPrevPage, pages } = paginationFn({
-        limit,
-        page,
-        total,
+        },
+        from: offset,
+        size: limit,
       });
-      return {
-        limit,
-        page,
+      total = elasticCount.count;
+      rs = elasticResult.hits.hits.map((productSource) => {
+        return productSource._source;
+      });
+      await this.cacheManager.set(keyCache, {
         total,
-        pages,
-        hasNextPage,
-        hasPrevPage,
         data: rs,
-        cache: isCache,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error.body);
-      console.log(JSON.stringify(error.body));
-      throw new InternalServerErrorException('Something wrong with server!');
+      });
     }
+
+    const { hasNextPage, hasPrevPage, pages } = paginationFn({
+      limit,
+      page,
+      total,
+    });
+    return {
+      limit,
+      page,
+      total,
+      pages,
+      hasNextPage,
+      hasPrevPage,
+      data: rs,
+      cache: isCache,
+    };
   }
 }

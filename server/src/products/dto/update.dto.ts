@@ -54,10 +54,10 @@ export class ProductDetails {
   @IsString()
   @MinLength(3)
   @ApiProperty({
-    description: 'Key of product details',
+    description: 'name of product details',
     example: 'Loại bảo hành',
   })
-  key: string;
+  name: string;
 
   @IsNotEmpty()
   @IsString()
@@ -151,7 +151,7 @@ export class UpdateBodyDto {
   @IsArray()
   @ValidateNested({ each: true })
   @ArrayMinSize(1)
-  @Type(() => Image)
+  @Type(() => ImageBody)
   @ApiProperty({
     description: 'images of product',
     type: ImageBody,

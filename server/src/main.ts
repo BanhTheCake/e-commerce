@@ -1,10 +1,11 @@
-import { NestFactory } from '@nestjs/core';
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
-import { ValidationPipe } from '@nestjs/common';
-import { useContainer } from 'class-validator';
+import { BadRequestException, ValidationPipe } from '@nestjs/common';
+import { ValidationError, useContainer } from 'class-validator';
 import cookieParser from 'cookie-parser';
 import { ConfigService } from '@nestjs/config';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { AllExceptionsFilter } from './catch-all.exception';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -21,6 +22,7 @@ async function bootstrap() {
       whitelist: true,
     }),
   );
+  app.useGlobalFilters(new AllExceptionsFilter());
   app.use(cookieParser());
 
   useContainer(app.select(AppModule), { fallbackOnErrors: true });

@@ -51,32 +51,24 @@ export class ImagesService {
   // ================= FOR ROUTE =====================
 
   async upload(file: Express.Multer.File) {
-    try {
-      const imageObj = await this.cloudinaryService.uploadFile(file);
-      if (!isUploadSuccess(imageObj)) {
-        throw new BadRequestException('Upload failed! Please try again.');
-      }
-      this.cacheManager.set(
-        `preload:image:${imageObj.public_id}`,
-        1,
-        1000 * 60 * 30, // 30 minutes
-      );
-      const data = {
-        url: imageObj.url,
-        secure: imageObj.secure_url,
-        publicId: imageObj.public_id,
-      };
-      return {
-        errCode: 0,
-        message: 'Upload success',
-        data,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const imageObj = await this.cloudinaryService.uploadFile(file);
+    if (!isUploadSuccess(imageObj)) {
+      throw new BadRequestException('Upload failed! Please try again.');
     }
+    this.cacheManager.set(
+      `preload:image:${imageObj.public_id}`,
+      1,
+      1000 * 60 * 30, // 30 minutes
+    );
+    const data = {
+      url: imageObj.url,
+      secure: imageObj.secure_url,
+      publicId: imageObj.public_id,
+    };
+    return {
+      errCode: 0,
+      message: 'Upload success',
+      data,
+    };
   }
 }

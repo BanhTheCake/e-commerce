@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Categories } from './category.entity';
 import { Products } from './product.entity';
@@ -6,6 +6,7 @@ import { Products } from './product.entity';
 @Entity({
   name: 'products_categories',
 })
+@Unique('productCategory', ['productId', 'categoryId'])
 export class Products_Categories extends DatabaseEntity {
   @Column()
   categoryId: string;

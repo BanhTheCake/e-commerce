@@ -109,7 +109,7 @@ export class ProductResponse {
     type: () => [ProductDetailsResponse],
   })
   @Expose()
-  @Type(() => CategoryResponse)
+  @Type(() => ProductDetailsResponse)
   details: ProductDetailsResponse[];
 
   @ApiProperty({

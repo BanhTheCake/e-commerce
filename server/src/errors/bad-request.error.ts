@@ -5,13 +5,13 @@ export abstract class BadRequestError<T> {
     description: 'Status code',
     example: 400,
   })
-  StatusCode: number;
+  statusCode: number;
 
   @ApiProperty({
-    description: 'Error message',
-    example: 'Bad Request',
+    description: 'Code',
+    example: 'BadRequestException',
   })
-  error: string;
+  code: string;
 
   abstract message: T;
 }

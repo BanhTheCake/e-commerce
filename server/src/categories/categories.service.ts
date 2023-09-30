@@ -68,153 +68,128 @@ export class CategoriesService {
   // ========= FOR ROUTE ==========
 
   async createNew(data: CreateNewCategoryDto) {
-    try {
-      const { label } = data;
-      const slug = slugifyFn(label);
+    const { label } = data;
+    const slug = slugifyFn(label);
 
-      const currentCategory = await this.categoriesRepository.findOne({
-        where: [{ label }, { slug }],
-      });
-      if (currentCategory) {
-        throw new BadRequestException(CREATE_CATEGORY_ROUTE.ALREADY_EXIST);
-      }
-      const newCategory = this.categoriesRepository.create({
-        ...data,
-        slug,
-      });
-      await this.categoriesRepository.save(newCategory);
-      await this.delAllCache();
-      return {
-        errCode: 0,
-        message: CREATE_CATEGORY_ROUTE.SUCCESS,
-        data: newCategory,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
+    const currentCategory = await this.categoriesRepository.findOne({
+      where: [{ label }, { slug }],
+    });
+    if (currentCategory) {
+      throw new BadRequestException(CREATE_CATEGORY_ROUTE.ALREADY_EXIST);
     }
+    const newCategory = this.categoriesRepository.create({
+      ...data,
+      slug,
+    });
+    await this.categoriesRepository.save(newCategory);
+    await this.delAllCache();
+    return {
+      errCode: 0,
+      message: CREATE_CATEGORY_ROUTE.SUCCESS,
+      data: newCategory,
+    };
   }
 
   async getAll(data: GetAllCategoriesDto) {
-    try {
-      const { q = '' } = data;
-      const keyCache = `categories:${slugifyFn(q)}`;
-      const cache = await this.cacheManager.get<Categories[]>(keyCache);
-      if (cache) {
-        return {
-          errCode: 0,
-          message: GET_ALL_CATEGORY_ROUTE.SUCCESS,
-          data: cache,
-          cache: true,
-        };
-      }
-      const categories = await this.categoriesRepository.find({
-        where: [{ label: Like(`%${q}%`) }, { slug: Like(`%${slugifyFn(q)}%`) }],
-      });
-      await this.cacheManager.set(keyCache, categories, 1000 * 60 * 30);
+    const { q = '' } = data;
+    const keyCache = `categories:${slugifyFn(q)}`;
+    const cache = await this.cacheManager.get<Categories[]>(keyCache);
+    if (cache) {
       return {
         errCode: 0,
         message: GET_ALL_CATEGORY_ROUTE.SUCCESS,
-        data: categories,
-        cache: false,
+        data: cache,
+        cache: true,
       };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
     }
+    const categories = await this.categoriesRepository.find({
+      where: [{ label: Like(`%${q}%`) }, { slug: Like(`%${slugifyFn(q)}%`) }],
+    });
+    await this.cacheManager.set(keyCache, categories, 1000 * 60 * 30);
+    return {
+      errCode: 0,
+      message: GET_ALL_CATEGORY_ROUTE.SUCCESS,
+      data: categories,
+      cache: false,
+    };
   }
 
   async updateOne(id: string, data: UpdateCategoryDto) {
-    try {
-      let currentCategory = await this.categoriesRepository.findOne({
-        where: { id },
-      });
-      if (!currentCategory) {
-        throw new BadRequestException(UPDATE_CATEGORY_ROUTE.NOT_FOUND);
-      }
-      const slug = slugifyFn(data.label);
-      currentCategory = {
-        ...currentCategory,
-        ...data,
-        slug,
-      };
-      await this.categoriesRepository.save(currentCategory);
-      await this.elasticServices.updateByQuery({
-        index: 'products',
-        query: {
-          nested: {
-            path: 'categories',
-            query: {
-              match: {
-                'categories.id': currentCategory.id,
-              },
+    let currentCategory = await this.categoriesRepository.findOne({
+      where: { id },
+    });
+    if (!currentCategory) {
+      throw new BadRequestException(UPDATE_CATEGORY_ROUTE.NOT_FOUND);
+    }
+    const slug = slugifyFn(data.label);
+    currentCategory = {
+      ...currentCategory,
+      ...data,
+      slug,
+    };
+    await this.categoriesRepository.save(currentCategory);
+    await this.elasticServices.updateByQuery({
+      index: 'products',
+      query: {
+        nested: {
+          path: 'categories',
+          query: {
+            match: {
+              'categories.id': currentCategory.id,
             },
           },
         },
-        script: {
-          lang: 'painless',
-          source: `
+      },
+      script: {
+        lang: 'painless',
+        source: `
           if (ctx._source.categories != null) {
             for (int i=ctx._source.categories.length-1; i>=0; i--) {
-                if (ctx._source.categories[i].id == params.value_to_remove) {
+                if (ctx._source.categories[i].id == params.value_to_update) {
                     ctx._source.categories[i] = params.value;
                 }
             }
           }
           `,
-          params: {
-            value_to_remove: currentCategory.id,
-            value: currentCategory,
-          },
+        params: {
+          value_to_update: currentCategory.id,
+          value: currentCategory,
         },
-      });
-      await this.delAllCache();
-      return {
-        errCode: 0,
-        message: UPDATE_CATEGORY_ROUTE.SUCCESS,
-        data: currentCategory,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+      },
+    });
+    await this.delAllCache();
+    return {
+      errCode: 0,
+      message: UPDATE_CATEGORY_ROUTE.SUCCESS,
+      data: currentCategory,
+    };
   }
 
   async deleteOne(id: string) {
-    try {
-      const currentCategory = await this.categoriesRepository.findOne({
-        where: { id },
-      });
-      if (!currentCategory) {
-        throw new BadRequestException(DELETE_CATEGORY_ROUTE.NOT_FOUND);
-      }
-      await this.categoriesRepository.softRemove(currentCategory);
+    const currentCategory = await this.categoriesRepository.findOne({
+      where: { id },
+    });
+    if (!currentCategory) {
+      throw new BadRequestException(DELETE_CATEGORY_ROUTE.NOT_FOUND);
+    }
+    await this.categoriesRepository.softRemove(currentCategory);
 
-      // update all products has this category
-      await this.elasticServices.updateByQuery({
-        index: 'products',
-        query: {
-          nested: {
-            path: 'categories',
-            query: {
-              match: {
-                'categories.id': currentCategory.id,
-              },
+    // update all products has this category
+    await this.elasticServices.updateByQuery({
+      index: 'products',
+      query: {
+        nested: {
+          path: 'categories',
+          query: {
+            match: {
+              'categories.id': currentCategory.id,
             },
           },
         },
-        script: {
-          lang: 'painless',
-          source: `
+      },
+      script: {
+        lang: 'painless',
+        source: `
           if (ctx._source.categories != null) {
             for (int i=ctx._source.categories.length-1; i>=0; i--) {
                 if (ctx._source.categories[i].id == params.value_to_remove) {
@@ -223,22 +198,15 @@ export class CategoriesService {
             }
           }
           `,
-          params: {
-            value_to_remove: currentCategory.id,
-          },
+        params: {
+          value_to_remove: currentCategory.id,
         },
-      });
-      await this.delAllCache();
-      return {
-        errCode: 0,
-        message: DELETE_CATEGORY_ROUTE.SUCCESS,
-      };
-    } catch (error) {
-      if (error instanceof HttpException) {
-        throw error;
-      }
-      console.log(error);
-      throw new InternalServerErrorException('Something wrong with server!');
-    }
+      },
+    });
+    await this.delAllCache();
+    return {
+      errCode: 0,
+      message: DELETE_CATEGORY_ROUTE.SUCCESS,
+    };
   }
 }
