@@ -31,6 +31,7 @@ export class CartsConsumer {
       });
       await historyItemRepository.save(productHistory);
       await queryRunner.commitTransaction();
+      return { message: 'Ok' };
     } catch (error) {
       await queryRunner.rollbackTransaction();
       console.log(error);

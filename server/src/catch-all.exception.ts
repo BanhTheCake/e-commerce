@@ -30,10 +30,11 @@ export class AllExceptionsFilter implements ExceptionFilter {
         break;
       case exception instanceof QueryFailedError: // this is a TypeOrm error
         code = (exception as any).code;
+        message = (exception as any).message;
+        detail = (exception as any).detail;
         if (code === '23505') {
           status = HttpStatus.BAD_REQUEST;
           message = 'Fields already exist!';
-          detail = (exception as any).detail;
         } else {
           console.log(exception);
         }

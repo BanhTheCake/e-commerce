@@ -82,6 +82,7 @@ export class RedisServices {
     key: Parameters<(typeof this.redisClient)['pSubscribe']>[0],
     callback: Parameters<(typeof this.redisClient)['pSubscribe']>[1],
   ) {
-    return this.redisClient.pSubscribe(key, callback);
+    const pub = this.redisClient.duplicate();
+    return pub.pSubscribe(key, callback);
   }
 }

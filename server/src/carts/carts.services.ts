@@ -19,7 +19,7 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Queue } from 'bull';
-import { DataSource, Repository } from 'typeorm';
+import { DataSource, QueryFailedError, Repository } from 'typeorm';
 import { AddToDto } from './dto/add.dto';
 import { DeleteDto } from './dto/delete.dto';
 import { PaymentDto } from './dto/payment.dto';
@@ -172,6 +172,8 @@ export class CartsServices {
     };
   }
 
+  // handle payment with redis
+
   async payment(data: PaymentDto, userId: string) {
     const { cartId, items } = data;
     let total = 0;
@@ -273,4 +275,96 @@ export class CartsServices {
       }
     }
   }
+
+  // handle payment with transaction
+
+  // async payment(data: PaymentDto, userId: string) {
+  //   const { cartId, items } = data;
+  //   let total = 0;
+  //   const historyItems: HistoryItem[] = [];
+  //   const cartItems: CartItem[] = [];
+  //   for (const item of items) {
+  //     const cartItem = await this.cartItemsRepository.findOne({
+  //       where: {
+  //         productId: item.productId,
+  //         cartId: cartId,
+  //       },
+  //       relations: {
+  //         product: true,
+  //       },
+  //     });
+  //     if (!cartItem) {
+  //       throw new BadRequestException(
+  //         PAYMENT_ROUTE.PRODUCT_NOT_FOUND(item.productId),
+  //       );
+  //     }
+  //     cartItems.push({
+  //       ...item,
+  //       price: cartItem.product.price,
+  //       quantity: cartItem.quantity,
+  //       stock: cartItem.product.quantity,
+  //       id: cartItem.id,
+  //     });
+  //   }
+  //   for (const cartItem of cartItems) {
+  //     total = total + cartItem.price * cartItem.quantity;
+  //     const historyItem: HistoryItem = {
+  //       price: cartItem.price,
+  //       quantity: cartItem.quantity,
+  //       productId: cartItem.productId,
+  //     };
+  //     historyItems.push(historyItem);
+  //   }
+  //   // payment ....
+  //   await delay(2000);
+
+  //   const queryRunner = await this.helpers.startTransaction();
+  //   try {
+  //     // update stock product
+  //     for (const cartItem of cartItems) {
+  //       await queryRunner.manager
+  //         .createQueryBuilder()
+  //         .update(Products)
+  //         .set({
+  //           quantity: () => `quantity - :quantity`,
+  //         })
+  //         .setParameters({
+  //           quantity: cartItem.quantity,
+  //         })
+  //         .where('id = :id', { id: cartItem.productId })
+  //         .execute();
+  //     }
+
+  //     // update cart items in redis
+  //     const cartItemDelete = cartItems.map((cartItem) => {
+  //       return this.cartItemsRepository.create({
+  //         id: cartItem.id,
+  //       });
+  //     });
+  //     await queryRunner.manager.getRepository(CartItems).remove(cartItemDelete);
+
+  //     // create history
+  //     await this.cartsQueue.add(
+  //       'history',
+  //       new CreateHistoryQueue(userId, total, historyItems),
+  //     );
+  //     await queryRunner.commitTransaction();
+  //     return {
+  //       errCode: 0,
+  //       message: PAYMENT_ROUTE.SUCCESS,
+  //     };
+  //   } catch (error) {
+  //     await queryRunner.rollbackTransaction();
+  //     if (
+  //       error instanceof QueryFailedError &&
+  //       (error as any).code === '23514'
+  //     ) {
+  //       const productId = error.parameters[1];
+  //       throw new BadRequestException(PAYMENT_ROUTE.OUT_OF_STOCK(productId));
+  //     }
+  //     throw error;
+  //   } finally {
+  //     await queryRunner.release();
+  //   }
+  // }
 }

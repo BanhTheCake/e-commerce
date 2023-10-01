@@ -58,7 +58,7 @@ export class ImagesService {
     this.cacheManager.set(
       `preload:image:${imageObj.public_id}`,
       1,
-      1000 * 60 * 30, // 30 minutes
+      1000 * 60, // 30 minutes
     );
     const data = {
       url: imageObj.url,
