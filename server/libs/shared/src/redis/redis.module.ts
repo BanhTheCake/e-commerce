@@ -23,14 +23,6 @@ export class RedisModule {
           provide: REDIS,
           useFactory: async (opts: RedisOptions) => {
             const client = createClient(opts);
-            client.on('error', (err) => {
-              console.log(err);
-            });
-            client.on('ready', () => {
-              console.log('redis ready');
-            });
-            await client.connect();
-            client.configSet('notify-keyspace-events', 'Ex');
             return client;
           },
           inject: [REDIS_OPTIONS],

@@ -1,18 +1,10 @@
-import { Images, Products, Users } from '@/entities';
-import { ImageType } from '@/entities/enum';
-import { ProductResponse } from '@/products/dto/product.response';
+import { Images } from '@/entities';
 import { CloudinaryService, RedisServices, isUploadSuccess } from '@app/shared';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import {
-  BadRequestException,
-  HttpException,
-  Inject,
-  Injectable,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cache } from 'cache-manager';
-import { DataSource, DeepPartial, QueryRunner, Repository } from 'typeorm';
+import { DataSource, DeepPartial, Repository } from 'typeorm';
 
 @Injectable()
 export class ImagesService {
@@ -58,7 +50,7 @@ export class ImagesService {
     this.cacheManager.set(
       `preload:image:${imageObj.public_id}`,
       1,
-      1000 * 60, // 30 minutes
+      1000 * 60 * 30, // 30 minutes
     );
     const data = {
       url: imageObj.url,

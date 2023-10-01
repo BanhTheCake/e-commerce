@@ -1,13 +1,24 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, OnModuleInit } from '@nestjs/common';
 import { REDIS } from './redis.constant';
 import { createClient } from 'redis';
 
 @Injectable()
-export class RedisServices {
+export class RedisServices implements OnModuleInit {
   constructor(
     @Inject(REDIS)
     private readonly redisClient: ReturnType<typeof createClient>,
   ) {}
+
+  async onModuleInit() {
+    this.redisClient.on('error', (err) => {
+      console.log(err);
+    });
+    this.redisClient.on('ready', () => {
+      console.log('redis ready');
+    });
+    await this.redisClient.connect();
+    await this.redisClient.configSet('notify-keyspace-events', 'Ex');
+  }
 
   async get(key: string) {
     return this.redisClient.get(key);
