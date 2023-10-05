@@ -5,6 +5,7 @@ import {
   JoinColumn,
   OneToOne,
   Unique,
+  Index,
 } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
@@ -15,7 +16,6 @@ import { Products } from './product.entity';
   name: 'images',
 })
 @Unique('ProductId@Url', ['productId', 'url'])
-@Unique('Owner@Url', ['ownerId', 'url'])
 export class Images extends DatabaseEntity {
   @Column()
   url: string;
@@ -30,9 +30,11 @@ export class Images extends DatabaseEntity {
   })
   role: ImageType;
 
+  @Index('pk_images_users')
   @Column({ nullable: true })
   ownerId: string;
 
+  @Index('pk_images_products')
   @Column({ nullable: true })
   productId: string;
 

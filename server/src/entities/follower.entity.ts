@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Index } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 
@@ -6,9 +6,11 @@ import { Users } from './user.entity';
   name: 'followers',
 })
 export class Followers extends DatabaseEntity {
+  @Index('pk_followers_users')
   @Column()
   userId: string;
 
+  @Index('pk_following_users')
   @Column()
   followingId: string;
 

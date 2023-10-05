@@ -1,4 +1,11 @@
-import { Entity, Column, OneToOne, JoinColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  OneToOne,
+  JoinColumn,
+  OneToMany,
+  Index,
+} from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { CartItems } from './cartItem.entity';
@@ -7,6 +14,7 @@ import { CartItems } from './cartItem.entity';
   name: 'carts',
 })
 export class Carts extends DatabaseEntity {
+  @Index('pk_carts')
   @Column()
   userId: string;
 

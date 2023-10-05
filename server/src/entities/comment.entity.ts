@@ -1,4 +1,11 @@
-import { Entity, Column, ManyToOne, JoinColumn, OneToMany } from 'typeorm';
+import {
+  Entity,
+  Column,
+  ManyToOne,
+  JoinColumn,
+  OneToMany,
+  Index,
+} from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { Products } from './product.entity';
@@ -13,12 +20,15 @@ export class Comments extends DatabaseEntity {
   @Column({ type: 'integer', nullable: true })
   starValue?: number;
 
+  @Index('pk_comments_users')
   @Column()
   userId: string;
 
+  @Index('pk_comments_products')
   @Column()
   productId: string;
 
+  @Index('pk_comments_comments')
   @Column({ nullable: true })
   replyId?: string;
 

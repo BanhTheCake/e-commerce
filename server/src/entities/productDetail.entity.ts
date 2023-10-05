@@ -1,4 +1,4 @@
-import { Entity, Column, JoinColumn, ManyToOne, Unique } from 'typeorm';
+import { Entity, Column, JoinColumn, ManyToOne, Unique, Index } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Products } from './product.entity';
 
@@ -13,6 +13,7 @@ export class ProductDetails extends DatabaseEntity {
   @Column()
   value: string;
 
+  @Index('pk_productDetails_products')
   @Column()
   productId: string;
 

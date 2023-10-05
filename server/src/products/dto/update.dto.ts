@@ -1,8 +1,6 @@
 import {
-  ArrayMaxSize,
   ArrayMinSize,
   IsArray,
-  IsIn,
   IsNotEmpty,
   IsNumber,
   IsOptional,
@@ -14,7 +12,6 @@ import {
   MaxLength,
   Min,
   MinLength,
-  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { TransformJson } from '@/decorators/transform-json.decorator';
@@ -33,7 +30,7 @@ export class UpdateParamDto {
 }
 
 export class ProductDetails {
-  @ValidateIf((o) => o.type === 'DEL' || o.type === 'MODIFY')
+  @IsOptional()
   @IsUUID()
   @ApiProperty({
     description: 'Id of details (required if type is MODIFY or DEL)',
@@ -41,14 +38,6 @@ export class ProductDetails {
     required: false,
   })
   id?: string;
-
-  @IsIn(UpdateTypeArr)
-  @IsNotEmpty()
-  @ApiProperty({
-    description: 'Type (DEL or MODIFY or ADD)',
-    example: 'DEL',
-  })
-  type: UpdateType;
 
   @IsNotEmpty()
   @IsString()
@@ -70,22 +59,14 @@ export class ProductDetails {
 }
 
 export class ImageBody {
-  @ValidateIf((o) => o.type === 'DEL')
+  @IsOptional()
   @IsUUID()
   @ApiProperty({
-    description: 'Id of details (required if type is DEL)',
+    description: 'Id of details',
     example: '66d695ce-2561-4e07-a992-7e65658a64d3',
     required: false,
   })
   id?: string;
-
-  @IsIn(UpdateTypeArr)
-  @IsNotEmpty()
-  @ApiProperty({
-    description: 'Type (DEL or MODIFY or ADD)',
-    example: 'DEL',
-  })
-  type: UpdateType;
 
   @IsUrl()
   @ApiProperty({
@@ -95,44 +76,26 @@ export class ImageBody {
   })
   url: string;
 
-  @IsString()
+  @IsOptional()
   @ApiProperty({
     description: 'Public id of images',
     example: 'ecommerce/cjs9a2fw8wlhztacaf2g',
   })
-  publicId: string;
-}
-
-export class Category {
-  @IsUUID()
-  @ApiProperty({
-    description: 'Id of category',
-    example: '66d695ce-2561-4e07-a992-7e65658a64d3',
-  })
-  id: string;
-
-  @IsIn(UpdateTypeArr)
-  @IsNotEmpty()
-  @ApiProperty({
-    description: 'Type (DEL or ADD)',
-    example: 'DEL',
-  })
-  type: UpdateType;
+  publicKey?: string;
 }
 
 export class UpdateBodyDto {
   @IsOptional()
   @IsArray()
-  @ValidateNested({ each: true })
+  @IsUUID('all', { each: true })
   @ArrayMinSize(1)
-  @Type(() => Category)
   @ApiProperty({
     description: 'List id of categories',
-    type: Category,
+    example: ['66d695ce-2561-4e07-a992-7e65658a64d3'],
     isArray: true,
     required: false,
   })
-  categories?: Category[];
+  categories?: string[];
 
   @IsOptional()
   @IsArray()

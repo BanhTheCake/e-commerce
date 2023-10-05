@@ -1,4 +1,4 @@
-import { Entity, Column, ManyToOne, JoinColumn, Unique } from 'typeorm';
+import { Entity, Column, ManyToOne, JoinColumn, Unique, Index } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Categories } from './category.entity';
 import { Products } from './product.entity';
@@ -8,9 +8,11 @@ import { Products } from './product.entity';
 })
 @Unique('productCategory', ['productId', 'categoryId'])
 export class Products_Categories extends DatabaseEntity {
+  @Index('pk_productCategories_categories')
   @Column()
   categoryId: string;
 
+  @Index('pk_productCategories_products')
   @Column()
   productId: string;
 

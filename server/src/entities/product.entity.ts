@@ -6,6 +6,7 @@ import {
   OneToMany,
   Unique,
   Check,
+  Index,
 } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
@@ -36,6 +37,7 @@ export class Products extends DatabaseEntity {
   @Column({ type: 'integer' })
   quantity: number;
 
+  @Index('pk_products_users')
   @Column({ type: 'uuid' })
   ownerId: string;
 

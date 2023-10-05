@@ -1,4 +1,4 @@
-import { Entity, Column, JoinColumn, ManyToOne } from 'typeorm';
+import { Entity, Column, JoinColumn, ManyToOne, Index } from 'typeorm';
 import { DatabaseEntity } from '@app/shared';
 import { Products } from './product.entity';
 import { Histories } from './history.entity';
@@ -7,9 +7,11 @@ import { Histories } from './history.entity';
   name: 'productHistories',
 })
 export class ProductHistories extends DatabaseEntity {
+  @Index('pk_productHistories_histories')
   @Column()
   historyId: string;
 
+  @Index('pk_productHistories_products')
   @Column()
   productId: string;
 

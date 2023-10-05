@@ -33,7 +33,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Cache } from 'cache-manager';
 import { cloneDeep, isEqual, omit, pickBy } from 'lodash';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, In, Not, Repository } from 'typeorm';
 import { CreateNewDto } from './dto/create-new.dto';
 import { DeleteDto } from './dto/delete.dto';
 import { GetAllQueryDto, ORDER } from './dto/get-all.dto';
@@ -46,6 +46,7 @@ import { ImageType } from '@/entities/enum';
 import { InjectQueue } from '@nestjs/bull';
 import { Queue } from 'bull';
 import { CreateNewQueue } from './queue/create-new.queue';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class ProductsService {
@@ -194,12 +195,12 @@ export class ProductsService {
     const categories = await this.categoriesService.helpers.validate(
       categoriesId,
     );
+
     const newProduct = this.productsRepository.create({
       ...omit(data, ['images', 'categories', 'details']),
       slug,
       ownerId: user.id,
     });
-
     // Add transaction
     const queryRunner = await this.helpers.starTransaction();
     try {
@@ -231,9 +232,9 @@ export class ProductsService {
       }));
       const newImageEntities = this.imagesService.helpers.create(newImages);
 
-      await queryRunner.manager.save(newImageEntities);
       await queryRunner.manager.save(newProductsCategoriesEntities);
       await queryRunner.manager.save(newDetailsEntities);
+      await queryRunner.manager.save(newImageEntities);
       await queryRunner.commitTransaction();
     } catch (error) {
       await queryRunner.rollbackTransaction();
@@ -306,95 +307,97 @@ export class ProductsService {
     try {
       await queryRunner.manager.getRepository(Products).save(currentProduct);
       if (data.categories) {
-        // delete product-category in database
-        const deleteProductCategoryIds = data.categories
-          .filter((category) => {
-            return category.type === 'DEL';
-          })
-          .map((category) => category.id);
-        const deleteCategoryEntities =
-          await this.productsCategoriesRepository.find({
-            where: {
-              categoryId: In(deleteProductCategoryIds),
-            },
-          });
+        // [VALIDATE]
+        await this.categoriesService.helpers.validate(data.categories);
 
-        // create new product-category
-        const newProductCategories = data.categories
-          .filter((category) => {
-            return category.type === 'ADD';
-          })
-          .map((category) => ({
-            categoryId: category.id,
+        // [DELETE]
+        await queryRunner.manager.getRepository(Products_Categories).delete({
+          categoryId: Not(In(data.categories)),
+          productId: currentProduct.id,
+        });
+
+        // [INSERT_OR_UPDATE]
+        const categoryEntities = [];
+        data.categories.forEach((category) => {
+          const categoryEntity = this.productsCategoriesRepository.create({
+            categoryId: category,
             productId: currentProduct.id,
-          }));
-        await this.categoriesService.helpers.validate(
-          newProductCategories.map((category) => category.categoryId),
-        );
-        const newCategoryEntities =
-          this.productsCategoriesRepository.create(newProductCategories);
-
-        await queryRunner.manager.remove(deleteCategoryEntities);
-        await queryRunner.manager.save(newCategoryEntities);
+          });
+          if (!categoryEntities.includes(categoryEntity)) {
+            categoryEntities.push(categoryEntity);
+          }
+        });
+        await queryRunner.manager
+          .getRepository(Products_Categories)
+          .upsert(categoryEntities, {
+            skipUpdateIfNoValuesChanged: true,
+            conflictPaths: ['productId', 'categoryId'], // create if not exist
+          });
       }
       if (data.images) {
-        // delete images in database
-        const deleteImages = data.images.filter((image) => {
-          return image.type === 'DEL';
-        });
-        const deleteImageEntities =
-          this.imagesService.helpers.create(deleteImages);
+        // [MISSING]: VALIDATE IMAGES
 
-        // create new images
-        const newImages = data.images
-          .filter((image) => {
-            return image.type === 'ADD';
+        // [DELETE]
+        const imagesId = data.images
+          .map((image) => {
+            return image.id;
           })
-          .map((image) => ({
-            url: image.url,
-            publicKey: image.publicId,
-            role: ImageType.PRODUCT,
-            productId: currentProduct.id,
-          }));
-        const newImageEntities = this.imagesService.helpers.create(newImages);
+          .filter(Boolean);
+        await queryRunner.manager.getRepository(Images).delete({
+          id: Not(In(imagesId)),
+          productId: currentProduct.id,
+        });
 
-        await queryRunner.manager.remove(deleteImageEntities);
-        await queryRunner.manager.save(newImageEntities);
+        // [INSERT_OR_UPDATE]
+        const imagesEntity = [];
+        data.images.forEach((image) => {
+          const [imageEntity] = this.imagesService.helpers.create([
+            {
+              ...image,
+              productId: currentProduct.id,
+              role: ImageType.PRODUCT,
+            },
+          ]);
+          if (!imagesEntity.includes(imageEntity)) {
+            imagesEntity.push(imageEntity);
+          }
+        });
+        console.log(imagesEntity);
+        await queryRunner.manager.getRepository(Images).upsert(imagesEntity, {
+          skipUpdateIfNoValuesChanged: true,
+          conflictPaths: ['id'], // create if not exist
+        });
       }
       if (data.details) {
-        // delete details in database
-        const deleteDetails = data.details.filter((detail) => {
-          return detail.type === 'DEL';
-        });
-        const deleteDetailEntities =
-          this.productDetailsRepository.create(deleteDetails);
+        // [MISSING VALIDATE]
 
-        // create new details
-        const newDetail = data.details
-          .filter((detail) => {
-            return detail.type === 'ADD';
-          })
-          .map((detail) => ({
-            name: detail.name,
-            value: detail.value,
+        // [DELETE]
+        const detailsId = data.details
+          .map((detail) => detail?.id)
+          .filter(Boolean);
+        await queryRunner.manager.getRepository(ProductDetails).delete({
+          productId: currentProduct.id,
+          id: Not(In(detailsId)),
+        });
+
+        // [INSERT_OR_UPDATE]
+        const detailsEntity = [];
+        data.details.forEach((detail) => {
+          const detailEntity = this.productDetailsRepository.create({
+            ...detail,
             productId: currentProduct.id,
-          }));
-        const newDetailEntities =
-          this.productDetailsRepository.create(newDetail);
-
-        // modify details
-        const modifyDetail = data.details.filter((detail) => {
-          return detail.type === 'MODIFY';
+          });
+          if (!detailsEntity.includes(detailEntity)) {
+            detailsEntity.push(detailEntity);
+          }
         });
-        await this.validateDetails(modifyDetail.map((detail) => detail.id));
-        const modifyDetailEntities =
-          this.productDetailsRepository.create(modifyDetail);
 
-        await queryRunner.manager.remove(deleteDetailEntities);
-        await queryRunner.manager.save([
-          ...newDetailEntities,
-          ...modifyDetailEntities,
-        ]);
+        await queryRunner.manager
+          .getRepository(ProductDetails)
+          .upsert(detailsEntity, {
+            skipUpdateIfNoValuesChanged: true,
+            conflictPaths: ['id'], // create if not exist
+          });
       }
       await queryRunner.commitTransaction();
     } catch (error) {
