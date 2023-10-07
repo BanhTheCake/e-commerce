@@ -1,5 +1,14 @@
+'use client';
+
 import { FC } from 'react';
-import { Box, Container, Stack, Button, InputBase } from '@mui/material';
+import {
+    Box,
+    Container,
+    Stack,
+    Button,
+    InputBase,
+    useMediaQuery,
+} from '@mui/material';
 import { grey } from '@mui/material/colors';
 import Logo from '@/components/nav/Logo';
 import SearchIcon from '@mui/icons-material/Search';
@@ -10,7 +19,9 @@ interface layoutProps {
     children: React.ReactNode;
 }
 
-const layout: FC<layoutProps> = ({ children }) => {
+const ProductLayout: FC<layoutProps> = ({ children }) => {
+    const isMobile = useMediaQuery('(max-width:600px)');
+
     return (
         <>
             <Box
@@ -30,9 +41,11 @@ const layout: FC<layoutProps> = ({ children }) => {
                         spacing={4}
                         alignItems={'center'}
                     >
-                        <Box>
-                            <Logo />
-                        </Box>
+                        {!isMobile ? (
+                            <Box>
+                                <Logo />
+                            </Box>
+                        ) : null}
                         <InputBase
                             fullWidth
                             size="small"
@@ -67,10 +80,13 @@ const layout: FC<layoutProps> = ({ children }) => {
                             alignItems={'center'}
                             justifyContent={'center'}
                             sx={{
-                                width: '100px',
+                                width: {
+                                    xs: 'auto',
+                                    sm: '100px',
+                                },
                             }}
                         >
-                            <Box position="relative">
+                            <Box position="relative" display={'flex'}>
                                 <ShoppingCartOutlinedIcon fontSize="large" />
                                 <Box
                                     position="absolute"
@@ -105,4 +121,4 @@ const layout: FC<layoutProps> = ({ children }) => {
     );
 };
 
-export default layout;
+export default ProductLayout;

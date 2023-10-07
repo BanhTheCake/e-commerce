@@ -734,7 +734,7 @@ export class ProductsService {
                     lang: 'painless',
                     source: `   
                       double totalScore = 0.0;
-                      if (params['ownerIds'].contains(doc['ownerId'].value)) {
+                      if (params['followerIds'].contains(doc['ownerId'].value)) {
                         totalScore = totalScore + 1
                       }
                       long millis = doc['created_at'].value.millis;
@@ -743,7 +743,7 @@ export class ProductsService {
                       return totalScore;
                       `,
                     params: {
-                      ownerIds: followerIds,
+                      followerIds: followerIds,
                     },
                   },
                 },

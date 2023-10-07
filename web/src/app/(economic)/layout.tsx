@@ -1,15 +1,17 @@
 import { FC } from 'react';
-import { Container, Box, Stack, Link, Typography } from '@mui/material';
+import { Container, Box, Stack, Link, IconButton } from '@mui/material';
 import { grey } from '@mui/material/colors';
 import NextLink from 'next/link';
 import ToggleModeBtn from '@/components/nav/ToggleModeBtn';
 import AuthUser from '@/components/nav/AuthUser';
+import MenuIcon from '@mui/icons-material/Menu';
+import MenuMobile from '@/components/nav/MenuMobile';
 
 interface layoutProps {
     children: React.ReactNode;
 }
 
-const layout: FC<layoutProps> = ({ children }) => {
+const Layout: FC<layoutProps> = ({ children }) => {
     return (
         <>
             <Box
@@ -42,12 +44,14 @@ const layout: FC<layoutProps> = ({ children }) => {
                                 Kênh người bán
                             </Link>
                             <Box
+                                display={{ xs: 'none', sm: 'block' }}
                                 width={'1px'}
                                 height={'18px'}
                                 bgcolor={grey[300]}
                                 sx={{ opacity: 0.8 }}
                             />
                             <Link
+                                display={{ xs: 'none', sm: 'block' }}
                                 component={NextLink}
                                 href="/"
                                 color={'inherit'}
@@ -56,12 +60,14 @@ const layout: FC<layoutProps> = ({ children }) => {
                                 Facebook
                             </Link>
                             <Box
+                                display={{ xs: 'none', sm: 'block' }}
                                 width={'1px'}
                                 height={'18px'}
                                 bgcolor={grey[300]}
                                 sx={{ opacity: 0.8 }}
                             />
                             <Link
+                                display={{ xs: 'none', sm: 'block' }}
                                 component={NextLink}
                                 href="/"
                                 color={'inherit'}
@@ -87,4 +93,4 @@ const layout: FC<layoutProps> = ({ children }) => {
     );
 };
 
-export default layout;
+export default Layout;

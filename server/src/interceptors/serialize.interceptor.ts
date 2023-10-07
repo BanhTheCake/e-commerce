@@ -13,7 +13,7 @@ interface IData {
 }
 
 const isIData = (obj: any): obj is IData => {
-  return 'data' in obj;
+  return obj && 'data' in obj;
 };
 
 type classInstance = new (...args: any) => any;

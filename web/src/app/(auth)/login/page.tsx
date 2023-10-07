@@ -3,22 +3,17 @@ import {
     Typography,
     Stack,
     TextField,
-    InputAdornment,
-    IconButton,
     Button,
     Link,
     Box,
     FormHelperText,
 } from '@mui/material';
 import { grey, indigo } from '@mui/material/colors';
-import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import NextLink from 'next/link';
 import GoogleIcon from '@mui/icons-material/Google';
 import TextFieldPassword from '@/components/Password';
 
-interface pageProps {}
-
-const page: FC<pageProps> = ({}) => {
+const loginPage = () => {
     return (
         <Stack
             component={'form'}
@@ -142,4 +137,4 @@ const page: FC<pageProps> = ({}) => {
     );
 };
 
-export default page;
+export default loginPage;

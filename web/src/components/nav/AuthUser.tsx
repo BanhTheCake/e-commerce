@@ -14,6 +14,7 @@ import NextLink from 'next/link';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { UserState } from '@/redux/features/user/userSlice';
+import MenuMobile from './MenuMobile';
 
 interface AuthUserProps {}
 
@@ -79,24 +80,36 @@ const AuthUser: FC<AuthUserProps> = ({}) => {
                     </Menu>
                 </>
             ) : (
-                <Stack direction={'row'} spacing={2}>
-                    <Link
-                        component={NextLink}
-                        href={'/login'}
-                        underline="none"
-                        color={'inherit'}
+                <>
+                    <Stack
+                        direction={'row'}
+                        spacing={2}
+                        sx={{
+                            display: {
+                                xs: 'none',
+                                sm: 'flex',
+                            },
+                        }}
                     >
-                        Đăng nhập
-                    </Link>
-                    <Link
-                        component={NextLink}
-                        href={'/signup'}
-                        underline="none"
-                        color={'inherit'}
-                    >
-                        Đăng ký
-                    </Link>
-                </Stack>
+                        <Link
+                            component={NextLink}
+                            href={'/login'}
+                            underline="none"
+                            color={'inherit'}
+                        >
+                            Đăng nhập
+                        </Link>
+                        <Link
+                            component={NextLink}
+                            href={'/signup'}
+                            underline="none"
+                            color={'inherit'}
+                        >
+                            Đăng ký
+                        </Link>
+                    </Stack>
+                    <MenuMobile />
+                </>
             )}
         </>
     );

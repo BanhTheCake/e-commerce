@@ -338,7 +338,6 @@ export class UsersService {
   }
 
   async me(userId: string) {
-    console.log('ME: ', userId);
     let user = null;
     const keyCache = `user:me:${userId}`;
     const cache = await this.cacheManager.get<Users>(keyCache);
