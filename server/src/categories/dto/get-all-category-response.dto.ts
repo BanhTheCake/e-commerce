@@ -2,6 +2,8 @@ import { GET_ALL_CATEGORY_ROUTE } from '@/constant/category.constant';
 import { IResponse } from '@/response/response';
 import { ApiProperty } from '@nestjs/swagger';
 import { CategoryResponse } from './category.response';
+import { ImagesResponse } from '@/images/dto/image.response';
+import { Expose, Type } from 'class-transformer';
 
 export class GetAllCategoryResponse implements IResponse<CategoryResponse[]> {
   @ApiProperty({

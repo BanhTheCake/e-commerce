@@ -1,6 +1,6 @@
 import { CategoryResponse } from '@/categories/dto/category.response';
 import { ImagesResponse } from '@/images/dto/image.response';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, OmitType } from '@nestjs/swagger';
 import { Expose, Type } from 'class-transformer';
 
 export class ProductDetailsResponse {
@@ -98,11 +98,12 @@ export class ProductResponse {
 
   @ApiProperty({
     description: 'Categories of product',
-    type: () => [CategoryResponse],
+    type: () => OmitType(CategoryResponse, ['image']),
+    isArray: true,
   })
   @Expose()
-  @Type(() => CategoryResponse)
-  categories: CategoryResponse[];
+  @Type(() => OmitType(CategoryResponse, ['image']))
+  categories: Omit<CategoryResponse, 'images'>[];
 
   @ApiProperty({
     description: 'Categories of product',

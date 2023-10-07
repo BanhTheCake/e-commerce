@@ -1,5 +1,4 @@
 import { Images } from '@/entities';
-import { ImageType } from '@/entities/enum';
 import { CloudinaryService } from '@app/shared';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
@@ -28,14 +27,17 @@ export class ImageSubscriber implements EntitySubscriberInterface<Images> {
 
   // Delete user's image
   async beforeInsert(event: InsertEvent<Images>): Promise<any> {
-    if (event.entity.role === ImageType.PRODUCT) return;
-    const deleteImage = await this.imagesRepository.findOne({
-      where: { ownerId: event.entity.ownerId },
-    });
-    if (!deleteImage) {
+    if (event.entity.ownerId) {
+      await this.imagesRepository.delete({
+        ownerId: event.entity.ownerId,
+      });
       return;
     }
-    await this.imagesRepository.remove(deleteImage);
+    if (event.entity.categoryId) {
+      await this.imagesRepository.delete({
+        categoryId: event.entity.categoryId,
+      });
+    }
   }
 
   // Remove image in cloudinary

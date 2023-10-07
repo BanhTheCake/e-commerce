@@ -230,7 +230,10 @@ export class ProductsService {
         role: ImageType.PRODUCT,
         productId: newProduct.id,
       }));
-      const newImageEntities = this.imagesService.helpers.create(newImages);
+      const newImageEntities = this.imagesService.helpers.create({
+        key: 'product',
+        data: newImages,
+      });
 
       await queryRunner.manager.save(newProductsCategoriesEntities);
       await queryRunner.manager.save(newDetailsEntities);
@@ -351,13 +354,15 @@ export class ProductsService {
         // [INSERT_OR_UPDATE]
         const imagesEntity = [];
         data.images.forEach((image) => {
-          const [imageEntity] = this.imagesService.helpers.create([
-            {
-              ...image,
-              productId: currentProduct.id,
-              role: ImageType.PRODUCT,
-            },
-          ]);
+          const [imageEntity] = this.imagesService.helpers.create({
+            key: 'product',
+            data: [
+              {
+                ...image,
+                productId: currentProduct.id,
+              },
+            ],
+          });
           if (!imagesEntity.includes(imageEntity)) {
             imagesEntity.push(imageEntity);
           }

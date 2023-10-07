@@ -1,5 +1,6 @@
+import { ImagesResponse } from '@/images/dto/image.response';
 import { ApiProperty } from '@nestjs/swagger';
-import { Expose } from 'class-transformer';
+import { Expose, Type } from 'class-transformer';
 
 export class CategoryResponse {
   @ApiProperty({
@@ -36,4 +37,12 @@ export class CategoryResponse {
   })
   @Expose()
   updated_at: Date;
+
+  @ApiProperty({
+    description: 'Images of product',
+    type: () => ImagesResponse,
+  })
+  @Expose()
+  @Type(() => ImagesResponse)
+  image: ImagesResponse;
 }

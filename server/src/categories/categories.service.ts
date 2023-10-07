@@ -104,6 +104,9 @@ export class CategoriesService {
     }
     const categories = await this.categoriesRepository.find({
       where: [{ label: Like(`%${q}%`) }, { slug: Like(`%${slugifyFn(q)}%`) }],
+      relations: {
+        image: true,
+      },
     });
     await this.cacheManager.set(keyCache, categories, 1000 * 60 * 30);
     return {

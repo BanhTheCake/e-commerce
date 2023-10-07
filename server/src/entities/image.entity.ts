@@ -11,6 +11,7 @@ import { DatabaseEntity } from '@app/shared';
 import { Users } from './user.entity';
 import { ImageType } from './enum';
 import { Products } from './product.entity';
+import { Categories } from './category.entity';
 
 @Entity({
   name: 'images',
@@ -23,13 +24,6 @@ export class Images extends DatabaseEntity {
   @Column({ nullable: true })
   publicKey: string;
 
-  @Column({
-    type: 'enum',
-    enum: ImageType,
-    default: ImageType.USER,
-  })
-  role: ImageType;
-
   @Index('pk_images_users')
   @Column({ nullable: true })
   ownerId: string;
@@ -38,11 +32,21 @@ export class Images extends DatabaseEntity {
   @Column({ nullable: true })
   productId: string;
 
+  @Index('pk_images_categories')
+  @Column({ nullable: true })
+  categoryId: string;
+
   @OneToOne(() => Users, (user) => user.image, {
     onDelete: 'CASCADE',
   })
   @JoinColumn({ name: 'ownerId' })
   user: Users;
+
+  @OneToOne(() => Categories, (category) => category.image, {
+    onDelete: 'CASCADE',
+  })
+  @JoinColumn({ name: 'categoryId' })
+  category: Categories;
 
   @ManyToOne(() => Products, (product) => product.images, {
     onDelete: 'CASCADE',

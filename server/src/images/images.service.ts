@@ -6,6 +6,26 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Cache } from 'cache-manager';
 import { DataSource, DeepPartial, Repository } from 'typeorm';
 
+type ICreateImage =
+  | {
+      key: 'product';
+      data: Pick<
+        DeepPartial<Images>,
+        'id' | 'url' | 'publicKey' | 'productId'
+      >[];
+    }
+  | {
+      key: 'user';
+      data: Pick<DeepPartial<Images>, 'id' | 'url' | 'publicKey' | 'ownerId'>[];
+    }
+  | {
+      key: 'category';
+      data: Pick<
+        DeepPartial<Images>,
+        'id' | 'url' | 'publicKey' | 'categoryId'
+      >[];
+    };
+
 @Injectable()
 export class ImagesService {
   constructor(
@@ -30,13 +50,14 @@ export class ImagesService {
       const imageEntities = this.imagesRepository.create(imageList);
       return await this.imagesRepository.save(imageEntities);
     },
-    create: (entityLikeArray: DeepPartial<Images>[]) => {
-      for (const entity of entityLikeArray) {
+    create: (input: ICreateImage) => {
+      const { data } = input;
+      for (const entity of data) {
         if (entity.publicKey) {
           this.cacheManager.del(`preload:image:${entity.publicKey}`);
         }
       }
-      return this.imagesRepository.create(entityLikeArray);
+      return this.imagesRepository.create(data);
     },
   };
 

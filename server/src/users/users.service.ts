@@ -438,10 +438,12 @@ export class UsersService {
       const image = {
         url: url,
         publicKey: publicId,
-        role: ImageType.USER,
         ownerId: currentUser.id,
       };
-      const imageEntity = this.imagesService.helpers.create([image])[0];
+      const [imageEntity] = this.imagesService.helpers.create({
+        key: 'user',
+        data: [image],
+      });
       currentUser.avatar = image.url;
 
       await queryRunner.manager.save(currentUser);
