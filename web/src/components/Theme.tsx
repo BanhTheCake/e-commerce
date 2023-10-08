@@ -1,7 +1,9 @@
 'use client';
 
-import { FC, Ref, forwardRef, useMemo } from 'react';
-import { createTheme, ThemeProvider, CssBaseline } from '@mui/material';
+import { FC, useMemo } from 'react';
+import ThemeProvider from '@mui/material/styles/ThemeProvider';
+import CssBaseline from '@mui/material/CssBaseline';
+import { createTheme } from '@mui/material/styles';
 import { Roboto } from 'next/font/google';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
@@ -59,6 +61,14 @@ const Theme: FC<ThemeProps> = ({ children }) => {
                             },
                         },
                     ],
+                    defaultProps: {
+                        sx: {
+                            '& .MuiInputBase-input': {
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                            },
+                        },
+                    },
                 },
                 MuiOutlinedInput: {
                     variants: [

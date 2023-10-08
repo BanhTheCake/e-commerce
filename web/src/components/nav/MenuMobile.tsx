@@ -16,10 +16,12 @@ import NextLink from 'next/link';
 import { blue, grey } from '@mui/material/colors';
 import FacebookIcon from '@mui/icons-material/Facebook';
 import InstagramIcon from '@mui/icons-material/Instagram';
+import { usePathname } from 'next/navigation';
 
 interface MenuMobileProps {}
 
 const MenuMobile: FC<MenuMobileProps> = ({}) => {
+    const pathname = usePathname();
     const [isOpen, setIsOpen] = useState(false);
     const isMobile = useMediaQuery('(max-width:600px)');
 
@@ -108,9 +110,10 @@ const MenuMobile: FC<MenuMobileProps> = ({}) => {
                     <Stack spacing={2} direction="row">
                         <Link
                             component={NextLink}
-                            href="/login"
+                            href={'/login?redirect=' + pathname}
                             underline="none"
                             width={'100%'}
+                            onClick={toggleMenu}
                         >
                             <Button variant="contained" sx={{ width: '100%' }}>
                                 Đăng nhập
@@ -121,6 +124,7 @@ const MenuMobile: FC<MenuMobileProps> = ({}) => {
                             href="/signup"
                             underline="none"
                             width={'100%'}
+                            onClick={toggleMenu}
                         >
                             <Button variant="contained" sx={{ width: '100%' }}>
                                 Đăng ký

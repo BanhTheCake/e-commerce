@@ -15,10 +15,12 @@ import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { UserState } from '@/redux/features/user/userSlice';
 import MenuMobile from './MenuMobile';
+import { usePathname } from 'next/navigation';
 
 interface AuthUserProps {}
 
 const AuthUser: FC<AuthUserProps> = ({}) => {
+    const pathname = usePathname();
     const user = useSelector<RootState, UserState>((state) => state.user);
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
@@ -93,7 +95,7 @@ const AuthUser: FC<AuthUserProps> = ({}) => {
                     >
                         <Link
                             component={NextLink}
-                            href={'/login'}
+                            href={'/login?redirect=' + pathname}
                             underline="none"
                             color={'inherit'}
                         >

@@ -1,17 +1,22 @@
 import { FC } from 'react';
-import { Container, Box, Stack, Link, IconButton } from '@mui/material';
+import { Container, Box, Stack, Link } from '@mui/material';
 import { grey } from '@mui/material/colors';
 import NextLink from 'next/link';
 import ToggleModeBtn from '@/components/nav/ToggleModeBtn';
 import AuthUser from '@/components/nav/AuthUser';
-import MenuIcon from '@mui/icons-material/Menu';
-import MenuMobile from '@/components/nav/MenuMobile';
+import { headers } from 'next/headers';
+import Footer from '@/components/Footer';
+import SecondNav from '@/components/nav/SecondNav';
 
 interface layoutProps {
     children: React.ReactNode;
+    modal: React.ReactNode;
 }
 
-const Layout: FC<layoutProps> = ({ children }) => {
+const Layout: FC<layoutProps> = ({ children, modal }) => {
+    const headerList = headers();
+    const pathname = headerList.get('x-pathname');
+    const isShowSecondNav = pathname !== '/helps';
     return (
         <>
             <Box
@@ -20,7 +25,7 @@ const Layout: FC<layoutProps> = ({ children }) => {
                 color={grey[50]}
                 fontSize={'14px'}
                 position={'fixed'}
-                height={'42px'}
+                zIndex={30}
             >
                 <Container maxWidth="lg">
                     <Stack
@@ -29,6 +34,7 @@ const Layout: FC<layoutProps> = ({ children }) => {
                         alignItems={'center'}
                         spacing={2}
                         py={0.5}
+                        height={'42px'}
                     >
                         <Stack
                             direction={'row'}
@@ -86,9 +92,22 @@ const Layout: FC<layoutProps> = ({ children }) => {
                             <AuthUser />
                         </Stack>
                     </Stack>
+                    {isShowSecondNav && (
+                        <Box height={'65px'}>
+                            <SecondNav />
+                        </Box>
+                    )}
                 </Container>
             </Box>
-            {children}
+            <Box
+                bgcolor={grey[100]}
+                pt={isShowSecondNav ? '107px' : '42px'}
+                minHeight={'100vh'}
+            >
+                <Container maxWidth={'lg'}>{children}</Container>
+            </Box>
+            {modal}
+            <Footer color="white" />
         </>
     );
 };

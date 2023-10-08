@@ -1,6 +1,6 @@
 'use client';
 
-import { FC, useState } from 'react';
+import { FC, useState, forwardRef } from 'react';
 import {
     TextField,
     InputAdornment,
@@ -10,14 +10,16 @@ import {
 import VisibilityOff from '@mui/icons-material/VisibilityOff';
 import VisibilityOn from '@mui/icons-material/Visibility';
 
-const TextFieldPassword: FC<Omit<TextFieldProps, 'InputProps' | 'type'>> = (
-    props
-) => {
+const TextFieldPassword = forwardRef<
+    HTMLInputElement,
+    Omit<TextFieldProps, 'InputProps' | 'type'>
+>((props, ref) => {
     const [showPassword, setShowPassword] = useState(false);
     return (
         <TextField
+            ref={ref}
             {...props}
-            type={showPassword ? 'password' : 'text'}
+            type={showPassword ? 'text' : 'password'}
             InputProps={{
                 endAdornment: (
                     <InputAdornment
@@ -36,6 +38,8 @@ const TextFieldPassword: FC<Omit<TextFieldProps, 'InputProps' | 'type'>> = (
             }}
         />
     );
-};
+});
+
+TextFieldPassword.displayName = 'TextFieldPassword';
 
 export default TextFieldPassword;

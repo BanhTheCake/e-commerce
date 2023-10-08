@@ -1,8 +1,9 @@
 'use client';
 
 import { store } from '@/redux/store';
-import { FC } from 'react';
+import { FC, useState } from 'react';
 import { Provider } from 'react-redux';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Theme from './Theme';
 
 interface ProvidersProps {
@@ -10,10 +11,14 @@ interface ProvidersProps {
 }
 
 const Providers: FC<ProvidersProps> = ({ children }) => {
+    const [queryClient] = useState(() => new QueryClient());
+
     return (
-        <Provider store={store}>
-            <Theme>{children}</Theme>
-        </Provider>
+        <QueryClientProvider client={queryClient}>
+            <Provider store={store}>
+                <Theme>{children}</Theme>
+            </Provider>
+        </QueryClientProvider>
     );
 };
 
