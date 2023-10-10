@@ -45,12 +45,12 @@ import { GetAllCategoryResponse } from './dto/get-all-category-response.dto';
 @ApiTags('Categories')
 @ApiAuth()
 @ApiInternalServerErrorResponse({ type: InternalServerError })
-@AuthWithAccessToken()
 @Controller('categories')
 export class CategoriesController {
   constructor(private readonly categoriesService: CategoriesService) {}
 
   @Post('create')
+  @AuthWithAccessToken()
   @Serialize(CategoryResponse)
   @ApiOperation({ summary: 'Create new category' })
   @ApiOkResponse({ type: CreateNewCategoryResponse })
@@ -60,6 +60,7 @@ export class CategoriesController {
   }
 
   @Put('update/:id')
+  @AuthWithAccessToken()
   @Serialize(CategoryResponse)
   @ApiOperation({ summary: 'Update current category with id' })
   @ApiOkResponse({ type: UpdateCategoryResponse })
@@ -72,6 +73,7 @@ export class CategoriesController {
   }
 
   @Delete('delete/:id')
+  @AuthWithAccessToken()
   @ApiOperation({ summary: 'Delete category with id' })
   @ApiOkResponse({ type: DeleteCategoryResponse })
   @ApiBadRequestResponse({ type: DeleteCategoryError_NotFound })

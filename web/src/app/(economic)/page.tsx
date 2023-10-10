@@ -1,7 +1,9 @@
-import { FC } from 'react';
-import { Box, Stack } from '@mui/material';
+import Hydrated from '@/components/hydrated/Hydrated';
 import Banner from '@/components/product/Banner';
 import CategoryHomePage from '@/components/product/CategoryHomePage';
+import { getCategoriesQuery } from '@/ky/category.ky';
+import { Stack } from '@mui/material';
+import { FC } from 'react';
 
 interface pageProps {}
 
@@ -37,10 +39,21 @@ const subData = [
 
 const HomePage: FC<pageProps> = ({}) => {
     return (
-        <Stack py={4} spacing={4}>
-            <Banner swiperData={data} subSwiper={subData} />
-            <CategoryHomePage />
-        </Stack>
+        <div>
+            <Stack py={4} spacing={4}>
+                <Banner swiperData={data} subSwiper={subData} />
+                <Hydrated
+                    queryKey={['categories']}
+                    options={{
+                        staleTime: Infinity,
+                        cacheTime: Infinity,
+                        queryFn: () => getCategoriesQuery(),
+                    }}
+                >
+                    <CategoryHomePage />
+                </Hydrated>
+            </Stack>
+        </div>
     );
 };
 

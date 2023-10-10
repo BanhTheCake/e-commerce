@@ -16,11 +16,13 @@ import { useRouter } from 'next/navigation';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TForgotValidate, forgotSchema } from '@/validate/forgot.validate';
+import { useToast } from '@/components/Toaster';
+import { useMutation } from '@tanstack/react-query';
+import { forgotPasswordMutation } from '@/ky/auth.ky';
 
 interface ForgotPageProps {}
 
 const ForgotPage: FC<ForgotPageProps> = ({}) => {
-    const router = useRouter();
     const {
         register,
         handleSubmit,
@@ -29,8 +31,28 @@ const ForgotPage: FC<ForgotPageProps> = ({}) => {
         resolver: zodResolver(forgotSchema),
     });
 
+    const router = useRouter();
+    const toast = useToast();
+
+    const { mutate, isLoading } = useMutation({
+        mutationFn: forgotPasswordMutation,
+    });
+
     const onSubmit: SubmitHandler<TForgotValidate> = (data) => {
-        console.log(data);
+        mutate(data, {
+            onSuccess(data) {
+                toast({
+                    message: data.message,
+                    type: 'success',
+                });
+            },
+            onError(error) {
+                toast({
+                    message: error as string,
+                    type: 'error',
+                });
+            },
+        });
     };
 
     const onBack = () => {
@@ -92,6 +114,7 @@ const ForgotPage: FC<ForgotPageProps> = ({}) => {
                         sx={{ textTransform: 'uppercase' }}
                         variant="contained"
                         type="submit"
+                        disabled={isLoading}
                     >
                         Tiếp theo
                     </Button>

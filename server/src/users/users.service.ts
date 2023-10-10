@@ -327,7 +327,7 @@ export class UsersService {
       subject: 'BanhTheCake - Forgot password',
       html: generateHtml({
         username: currentUser.username,
-        linkToActive: `http://localhost:3000/api/users/forgot?token=${forgotToken}&id=${currentUser.id}`,
+        linkToActive: `http://localhost:3000/reset-password?token=${forgotToken}&id=${currentUser.id}`,
         label: 'forgot',
       }),
     });

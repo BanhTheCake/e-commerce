@@ -13,29 +13,40 @@ import NextLink from 'next/link';
 import 'swiper/css';
 import 'swiper/css/navigation';
 import 'swiper/css/grid';
+import { useQuery } from '@tanstack/react-query';
+import { getCategoriesQuery } from '@/ky/category.ky';
 
 interface CategoryHomePageProps {}
 
 const CategoryHomePage: FC<CategoryHomePageProps> = ({}) => {
+    const { data: result } = useQuery(['categories'], {
+        queryFn: () => getCategoriesQuery(),
+        cacheTime: Infinity,
+        staleTime: Infinity,
+    });
+
+    const categories = result?.data ?? [];
+
     return (
-        <Box
-            sx={{
-                boxShadow: 'rgba(99, 99, 99, 0.2) 0px 2px 8px 0px',
-                borderRadius: '4px',
-                overflow: 'hidden',
-            }}
-        >
-            <Typography
-                bgcolor={'white'}
-                variant="subtitle1"
-                color={grey[600]}
-                p={2}
-                textTransform={'uppercase'}
-                sx={{ borderBottom: '1px solid #eee' }}
-            >
-                Danh mục
-            </Typography>
+        <>
             <Box
+                sx={{
+                    boxShadow: 'rgba(99, 99, 99, 0.2) 0px 2px 8px 0px',
+                    borderRadius: '4px',
+                    overflow: 'hidden',
+                }}
+            >
+                <Typography
+                    bgcolor={'white'}
+                    variant="subtitle1"
+                    color={grey[600]}
+                    p={2}
+                    textTransform={'uppercase'}
+                    sx={{ borderBottom: '1px solid #eee' }}
+                >
+                    Danh mục
+                </Typography>
+                <Box
                 position={'relative'}
                 sx={{
                     '&:hover .button-prev-swiper-category, &:hover .button-next-swiper-category':
@@ -88,56 +99,58 @@ const CategoryHomePage: FC<CategoryHomePageProps> = ({}) => {
                         },
                     }}
                 >
-                    {Array.from({ length: 10 }, (_, i) => (
-                        <SwiperSlide key={i}>
-                            <Link
-                                component={NextLink}
-                                href="/"
-                                underline="none"
-                                display={'flex'}
-                            >
-                                <Box
-                                    bgcolor={'white'}
-                                    width={'100%'}
-                                    p={2}
-                                    display="flex"
-                                    flexDirection={'column'}
-                                    justifyContent={'center'}
-                                    sx={{
-                                        transition: 'all 0.2s ease',
-                                        '&:hover': {
-                                            boxShadow:
-                                                'rgba(99, 99, 99, 0.1) 0px 2px 10px 0px',
-                                        },
-                                    }}
+                    {categories.map((category) => {
+                        return (
+                            <SwiperSlide key={category.id}>
+                                <Link
+                                    component={NextLink}
+                                    href={`/${category.slug}`}
+                                    underline="none"
+                                    display={'flex'}
                                 >
                                     <Box
-                                        position={'relative'}
-                                        sx={{ aspectRatio: '1 / 1' }}
-                                    >
-                                        <Image
-                                            src="https://down-vn.img.susercontent.com/file/6cb7e633f8b63757463b676bd19a50e4_tn"
-                                            alt="category"
-                                            fill
-                                            style={{ objectFit: 'contain' }}
-                                            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                        />
-                                    </Box>
-                                    <Typography
-                                        textAlign={'center'}
+                                        bgcolor={'white'}
+                                        width={'100%'}
+                                        p={2}
+                                        display="flex"
+                                        flexDirection={'column'}
+                                        justifyContent={'center'}
                                         sx={{
-                                            typography: {
-                                                xs: 'body2',
-                                                sm: 'subtitle1',
+                                            transition: 'all 0.2s ease',
+                                            '&:hover': {
+                                                boxShadow:
+                                                    'rgba(99, 99, 99, 0.1) 0px 2px 10px 0px',
                                             },
                                         }}
                                     >
-                                        Máy tính & điện tử
-                                    </Typography>
-                                </Box>
-                            </Link>
-                        </SwiperSlide>
-                    ))}
+                                        <Box
+                                            position={'relative'}
+                                            sx={{ aspectRatio: '1 / 1' }}
+                                        >
+                                            <Image
+                                                src={category.image.url}
+                                                alt={category.label}
+                                                fill
+                                                style={{ objectFit: 'contain' }}
+                                                sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                            />
+                                        </Box>
+                                        <Typography
+                                            textAlign={'center'}
+                                            sx={{
+                                                typography: {
+                                                    xs: 'body2',
+                                                    sm: 'subtitle1',
+                                                },
+                                            }}
+                                        >
+                                            {category.label}
+                                        </Typography>
+                                    </Box>
+                                </Link>
+                            </SwiperSlide>
+                        );
+                    })}
                 </Box>
                 <IconButton
                     className="button-prev-swiper-category"
@@ -188,7 +201,8 @@ const CategoryHomePage: FC<CategoryHomePageProps> = ({}) => {
                     <ArrowForwardIosIcon fontSize="medium" />
                 </IconButton>
             </Box>
-        </Box>
+            </Box>
+        </>
     );
 };
 
