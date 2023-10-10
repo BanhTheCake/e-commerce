@@ -26,7 +26,7 @@ export class UserSubscriber implements EntitySubscriberInterface<Users> {
     const html = generateHtml({
       username: event.entity.username,
       linkToActive:
-        'http://localhost:3000/active/' +
+        'http://localhost:3000/active?token=' +
         [event.entity.id, event.entity.activeToken].join('.'),
       label: 'active',
     });

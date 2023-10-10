@@ -8,30 +8,36 @@ export enum UserRoles {
     ADMIN = 'admin',
 }
 
-export interface User {
+export interface UserState {
     id: string;
     username: string;
     email: string;
-    address: string;
-    avatar: string;
-    created_at: Date;
-    updated_at: Date;
+    address?: string;
+    avatar?: string;
+    created_at?: Date;
+    updated_at?: Date;
     role: UserRoles;
 }
 
-export type UserState = User | null;
-
-const initState: UserState = null as UserState;
+const initState: UserState = {
+    id: '',
+    username: '',
+    email: '',
+    role: UserRoles.USER,
+};
 
 export const userSlice = createSlice({
     name: 'user',
     initialState: initState,
     reducers: {
         setCurrentUser(state, action: PayloadAction<UserState>) {
-            state = action.payload;
+            return action.payload;
+        },
+        resetUser() {
+            return initState;
         },
     },
 });
 
-export const { setCurrentUser } = userSlice.actions;
+export const { setCurrentUser, resetUser } = userSlice.actions;
 export default userSlice.reducer;

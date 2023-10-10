@@ -11,28 +11,56 @@ import {
     Box,
 } from '@mui/material';
 import NextLink from 'next/link';
-import { useSelector } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
-import { UserState } from '@/redux/features/user/userSlice';
+import { UserState, resetUser } from '@/redux/features/user/userSlice';
 import MenuMobile from './MenuMobile';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
+import { useMutation } from '@tanstack/react-query';
+import { logoutMutation } from '@/ky/auth.ky';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthUserProps {}
 
 const AuthUser: FC<AuthUserProps> = ({}) => {
-    const pathname = usePathname();
     const user = useSelector<RootState, UserState>((state) => state.user);
+    const pathname = usePathname();
+    const dispatch = useDispatch();
+    const router = useRouter();
+    const queryClient = useQueryClient();
+
+    const { mutate } = useMutation({
+        mutationFn: logoutMutation,
+    });
+
     const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
     const open = Boolean(anchorEl);
+
     const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
         setAnchorEl(event.currentTarget);
     };
     const handleClose = () => {
         setAnchorEl(null);
     };
+
+    const handleLogout = () => {
+        handleClose();
+        mutate(undefined, {
+            onSettled() {
+                dispatch(resetUser());
+                // Remove all queries (can be skip)
+                queryClient.removeQueries({
+                    queryKey: ['me'],
+                    exact: true,
+                });
+                router.push('/login');
+            },
+        });
+    };
+
     return (
         <>
-            {user ? (
+            {user.id ? (
                 <>
                     <Stack
                         component={Box}
@@ -44,13 +72,18 @@ const AuthUser: FC<AuthUserProps> = ({}) => {
                         sx={{ cursor: 'pointer' }}
                     >
                         <Avatar
-                            alt="BanhTheCake"
-                            src="https://picsum.photos/200"
+                            alt={user.username}
+                            src={user.avatar ?? 'https://picsum.photos/200'}
                             sx={{ width: 24, height: 24 }}
                         >
-                            B
+                            {user.username?.charAt(0)}
                         </Avatar>
-                        <Typography variant="body2">BanhTheCake</Typography>
+                        <Typography
+                            variant="body2"
+                            textTransform={'capitalize'}
+                        >
+                            {user.username}
+                        </Typography>
                     </Stack>
                     <Menu
                         id="basic-menu"
@@ -78,7 +111,7 @@ const AuthUser: FC<AuthUserProps> = ({}) => {
                     >
                         <MenuItem>Tài khoản của tôi</MenuItem>
                         <MenuItem>Đơn mua</MenuItem>
-                        <MenuItem>Đăng xuất</MenuItem>
+                        <MenuItem onClick={handleLogout}>Đăng xuất</MenuItem>
                     </Menu>
                 </>
             ) : (

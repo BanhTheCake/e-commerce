@@ -15,20 +15,51 @@ import GoogleIcon from '@mui/icons-material/Google';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { SignupSchema, TSignupValidate } from '@/validate/signup.validate';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { useMutation } from '@tanstack/react-query';
+import { signupMutation } from '@/ky/auth.ky';
+import { useToast } from '../Toaster';
 
 interface SignupFormProps {}
+const defaultValues: TSignupValidate = {
+    confirmPassword: '',
+    email: '',
+    password: '',
+    username: '',
+};
 
 const SignupForm: FC<SignupFormProps> = ({}) => {
     const {
         register,
         handleSubmit,
         formState: { errors },
+        reset,
     } = useForm<TSignupValidate>({
         resolver: zodResolver(SignupSchema),
+        defaultValues: defaultValues,
     });
 
+    const { mutate, isLoading } = useMutation({
+        mutationFn: signupMutation,
+    });
+
+    const toast = useToast();
+
     const onSubmit: SubmitHandler<TSignupValidate> = (data) => {
-        console.log(data);
+        mutate(data, {
+            onSuccess(data) {
+                toast({
+                    message: data.message,
+                    type: 'success',
+                });
+                reset(defaultValues);
+            },
+            onError(error) {
+                toast({
+                    message: error as string,
+                    type: 'error',
+                });
+            },
+        });
     };
 
     return (
@@ -123,6 +154,7 @@ const SignupForm: FC<SignupFormProps> = ({}) => {
                     fullWidth
                     size="medium"
                     type="submit"
+                    disabled={isLoading}
                 >
                     Đăng ký
                 </Button>

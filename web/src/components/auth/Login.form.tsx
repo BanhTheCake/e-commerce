@@ -17,6 +17,12 @@ import GoogleIcon from '@mui/icons-material/Google';
 import { useForm, SubmitHandler } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TLoginValidate, loginSchema } from '@/validate/login.validate';
+import { useMutation } from '@tanstack/react-query';
+import { loginMutation } from '@/ky/auth.ky';
+import { useToast } from '../Toaster';
+import { useDispatch } from 'react-redux';
+import { setCurrentUser } from '@/redux/features/user/userSlice';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 interface formProps {}
 
@@ -30,8 +36,29 @@ const LoginForm: FC<formProps> = ({}) => {
         reValidateMode: 'onSubmit',
     });
 
+    const { mutate, isLoading } = useMutation({
+        mutationFn: loginMutation,
+    });
+
+    const toast = useToast();
+    const dispatch = useDispatch();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const redirect = searchParams.get('redirect') || '/';
+
     const onSubmit: SubmitHandler<TLoginValidate> = (data) => {
-        console.log(data);
+        mutate(data, {
+            onSuccess(data, variables, context) {
+                dispatch(setCurrentUser(data.data));
+                router.push(redirect);
+            },
+            onError(error) {
+                toast({
+                    message: error as string,
+                    type: 'error',
+                });
+            },
+        });
     };
 
     return (

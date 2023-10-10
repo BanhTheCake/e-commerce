@@ -106,7 +106,7 @@ const Layout: FC<layoutProps> = ({ children, modal }) => {
             >
                 <Container maxWidth={'lg'}>{children}</Container>
             </Box>
-            {modal}
+            {/* {modal} */}
             <Footer color="white" />
         </>
     );
